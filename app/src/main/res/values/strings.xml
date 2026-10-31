@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Flow</string>
+    <string name="cd_inbox_tab">Inbox tab</string>
+    <string name="cd_today_next_tab">Today and Next Action tab</string>
+    <string name="cd_projects_tab">Projects tab</string>
+    <string name="cd_quick_add_task">Quick add task</string>
+    <string name="cd_complete_task">Mark task as complete</string>
+    <string name="cd_uncomplete_task">Mark task as incomplete</string>
+    <string name="cd_flag_task">Flag task</string>
+    <string name="cd_unflag_task">Unflag task</string>
+    <string name="cd_delete_task">Delete task</string>
+    <string name="cd_edit_task">Edit task</string>
+    <string name="cd_settings">Accessibility and Settings</string>
+    <string name="cd_close">Close dialog</string>
+</resources>
