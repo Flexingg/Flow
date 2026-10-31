@@ -1,10 +1,17 @@
 package com.flow.todo.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -13,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -29,6 +37,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +53,8 @@ import com.flow.todo.ui.theme.fluidInteractive
  * ColorOS 17 Fluid Top Bar:
  * - Transparent at rest with large expressive 28.sp Medium title and optional subtitle
  * - Morphs smoothly into a regular glass bar with progressive blur bottom edge and compact title when scrolled
+ * - Title scale and vertical offset elastically morph with FluidSprings.morph
+ * - Expressive AnimatedContent with bouncy slide + fade when title or subtitle updates between tabs
  * - 42.dp circular glass Settings/Accessibility action button on trailing side
  */
 @Composable
@@ -69,7 +81,18 @@ fun FluidTopBar(
         label = "topBarVerticalPadding"
     )
 
-    val titleFontSize = (28f - (10f * scrollFraction)).sp
+    val titleScale by animateFloatAsState(
+        targetValue = if (isScrolled) 0.82f else 1.0f,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "topBarTitleScale"
+    )
+
+    val titleOffsetY by animateDpAsState(
+        targetValue = if (isScrolled) (-2).dp else 0.dp,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "topBarTitleOffsetY"
+    )
+
     val titleFontWeight = if (scrollFraction > 0.5f) FontWeight.SemiBold else FontWeight.Medium
 
     Box(
@@ -118,30 +141,70 @@ fun FluidTopBar(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = titleFontSize,
-                    fontWeight = titleFontWeight,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                AnimatedVisibility(
-                    visible = !isScrolled && !subtitle.isNullOrBlank(),
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    if (!subtitle.isNullOrBlank()) {
+            Box(modifier = Modifier.weight(1f)) {
+                AnimatedContent(
+                    targetState = title to subtitle,
+                    transitionSpec = {
+                        if (isReducedMotion) {
+                            fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(150))
+                        } else {
+                            (slideInVertically(
+                                animationSpec = FluidSprings.bubbly(false),
+                                initialOffsetY = { 24 }
+                            ) + fadeIn(
+                                animationSpec = tween(180)
+                            ) + scaleIn(
+                                initialScale = 0.94f,
+                                animationSpec = FluidSprings.bubbly(false)
+                            )).togetherWith(
+                                slideOutVertically(
+                                    animationSpec = FluidSprings.morph(false),
+                                    targetOffsetY = { -20 }
+                                ) + fadeOut(
+                                    animationSpec = tween(140)
+                                ) + scaleOut(
+                                    targetScale = 0.96f,
+                                    animationSpec = FluidSprings.morph(false)
+                                )
+                            )
+                        }
+                    },
+                    label = "topBarTitleTransition"
+                ) { (currentTitle, currentSubtitle) ->
+                    Column(
+                        modifier = Modifier
+                            .offset(y = titleOffsetY)
+                            .graphicsLayer {
+                                scaleX = titleScale
+                                scaleY = titleScale
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                            }
+                    ) {
                         Text(
-                            text = subtitle,
-                            fontSize = 13.sp,
-                            color = colors.textSecondary,
+                            text = currentTitle,
+                            fontSize = 28.sp,
+                            fontWeight = titleFontWeight,
+                            color = colors.textPrimary,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp)
+                            overflow = TextOverflow.Ellipsis
                         )
+
+                        this@Column.AnimatedVisibility(
+                            visible = !isScrolled && !currentSubtitle.isNullOrBlank(),
+                            enter = fadeIn(FluidSprings.gentle(isReducedMotion)),
+                            exit = fadeOut(FluidSprings.gentle(isReducedMotion))
+                        ) {
+                            if (!currentSubtitle.isNullOrBlank()) {
+                                Text(
+                                    text = currentSubtitle,
+                                    fontSize = 13.sp,
+                                    color = colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

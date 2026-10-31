@@ -1,5 +1,7 @@
 package com.flow.todo.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,10 +26,16 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +46,7 @@ import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.components.FluidStretchySwitch
 import com.flow.todo.ui.theme.FluidShapes
 import com.flow.todo.ui.theme.FluidSpacing
+import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
 import com.flow.todo.ui.theme.GlassLevel
 import com.flow.todo.ui.theme.fluidGlass
@@ -50,6 +59,25 @@ fun FluidSettingsSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isReducedMotion = FluidTheme.isReducedMotion
+
+    // Bouncy entrance animation for sheet container
+    var sheetVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        sheetVisible = true
+    }
+
+    val sheetEntranceScale by animateFloatAsState(
+        targetValue = if (sheetVisible || isReducedMotion) 1.0f else 0.92f,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "settingsSheetEntranceScale"
+    )
+
+    val sheetEntranceAlpha by animateFloatAsState(
+        targetValue = if (sheetVisible || isReducedMotion) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "settingsSheetEntranceAlpha"
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -61,6 +89,11 @@ fun FluidSettingsSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = sheetEntranceScale
+                    scaleY = sheetEntranceScale
+                    alpha = sheetEntranceAlpha
+                }
                 .fluidGlass(
                     level = GlassLevel.THICK,
                     shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
@@ -247,6 +280,41 @@ fun FluidSettingsSheet(
                 Spacer(modifier = Modifier.height(FluidSpacing.xs))
 
                 FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                    // Material You Dynamic Color Toggle Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = FluidSpacing.md)) {
+                            Text(
+                                text = "Material You Dynamic Color",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FluidTheme.colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Adapt Living Flow glass and accents to your wallpaper palette (Android 12+)",
+                                fontSize = 13.sp,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                        }
+
+                        FluidStretchySwitch(
+                            checked = preferences.useDynamicColor,
+                            onCheckedChange = { checked ->
+                                onUpdatePreferences { it.copy(useDynamicColor = checked) }
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = FluidTheme.colors.divider,
+                        modifier = Modifier.padding(vertical = FluidSpacing.md)
+                    )
+
                     Text(
                         text = "Lighting & Aesthetics",
                         fontSize = 15.sp,

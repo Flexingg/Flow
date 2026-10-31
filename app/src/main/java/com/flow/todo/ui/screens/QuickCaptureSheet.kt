@@ -1,5 +1,8 @@
 package com.flow.todo.ui.screens
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -14,7 +17,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -27,7 +29,6 @@ import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -46,6 +47,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
@@ -58,6 +60,7 @@ import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.theme.FluidShapes
 import com.flow.todo.ui.theme.FluidSpacing
+import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
 import com.flow.todo.ui.theme.GlassLevel
 import com.flow.todo.ui.theme.fluidGlass
@@ -87,6 +90,7 @@ fun QuickCaptureSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
+    val isReducedMotion = FluidTheme.isReducedMotion
 
     var title by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -98,9 +102,49 @@ fun QuickCaptureSheet(
     var isTitleFocused by remember { mutableStateOf(false) }
     var isNotesFocused by remember { mutableStateOf(false) }
 
+    // Bouncy entrance animation for sheet container
+    var sheetVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        sheetVisible = true
         focusRequester.requestFocus()
     }
+
+    val sheetEntranceScale by animateFloatAsState(
+        targetValue = if (sheetVisible || isReducedMotion) 1.0f else 0.92f,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "quickCaptureEntranceScale"
+    )
+
+    val sheetEntranceAlpha by animateFloatAsState(
+        targetValue = if (sheetVisible || isReducedMotion) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "quickCaptureEntranceAlpha"
+    )
+
+    // Animated focus states for input boxes
+    val titleFieldScale by animateFloatAsState(
+        targetValue = if (isTitleFocused && !isReducedMotion) 1.01f else 1.0f,
+        animationSpec = FluidSprings.release(isReducedMotion),
+        label = "titleFieldScale"
+    )
+
+    val titleBorderWidth by animateDpAsState(
+        targetValue = if (isTitleFocused) 1.5.dp else 1.dp,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "titleBorderWidth"
+    )
+
+    val notesFieldScale by animateFloatAsState(
+        targetValue = if (isNotesFocused && !isReducedMotion) 1.01f else 1.0f,
+        animationSpec = FluidSprings.release(isReducedMotion),
+        label = "notesFieldScale"
+    )
+
+    val notesBorderWidth by animateDpAsState(
+        targetValue = if (isNotesFocused) 1.5.dp else 1.dp,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "notesBorderWidth"
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -112,6 +156,11 @@ fun QuickCaptureSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = sheetEntranceScale
+                    scaleY = sheetEntranceScale
+                    alpha = sheetEntranceAlpha
+                }
                 .fluidGlass(
                     level = GlassLevel.THICK,
                     shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
@@ -161,10 +210,14 @@ fun QuickCaptureSheet(
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
 
-                // Auto-focused Task Title Field with 1.5.dp accent contour glow on focus
+                // Auto-focused Task Title Field with bubbly scale and contour glow
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = titleFieldScale
+                            scaleY = titleFieldScale
+                        }
                         .clip(FluidShapes.md)
                         .background(
                             if (FluidTheme.colors.isDark) {
@@ -174,7 +227,7 @@ fun QuickCaptureSheet(
                             }
                         )
                         .border(
-                            width = if (isTitleFocused) 1.5.dp else 1.dp,
+                            width = titleBorderWidth,
                             brush = if (isTitleFocused) {
                                 Brush.verticalGradient(
                                     listOf(
@@ -215,10 +268,14 @@ fun QuickCaptureSheet(
 
                 Spacer(modifier = Modifier.height(FluidSpacing.sm))
 
-                // Notes Field with subtle contour glow on focus
+                // Notes Field with bubbly focus scale and subtle contour glow
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = notesFieldScale
+                            scaleY = notesFieldScale
+                        }
                         .clip(FluidShapes.md)
                         .background(
                             if (FluidTheme.colors.isDark) {
@@ -228,7 +285,7 @@ fun QuickCaptureSheet(
                             }
                         )
                         .border(
-                            width = if (isNotesFocused) 1.5.dp else 1.dp,
+                            width = notesBorderWidth,
                             brush = if (isNotesFocused) {
                                 Brush.verticalGradient(
                                     listOf(

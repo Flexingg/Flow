@@ -97,7 +97,7 @@ object FluidSprings {
         return if (reduceMotion) {
             tween(durationMillis = 150)
         } else {
-            spring(dampingRatio = 0.80f, stiffness = 800f)
+            spring(dampingRatio = 0.52f, stiffness = 650f)
         }
     }
 
@@ -105,7 +105,7 @@ object FluidSprings {
         return if (reduceMotion) {
             tween(durationMillis = 150)
         } else {
-            spring(dampingRatio = 0.55f, stiffness = 450f)
+            spring(dampingRatio = 0.38f, stiffness = 340f)
         }
     }
 
@@ -113,7 +113,7 @@ object FluidSprings {
         return if (reduceMotion) {
             tween(durationMillis = 150)
         } else {
-            spring(dampingRatio = 0.82f, stiffness = 380f)
+            spring(dampingRatio = 0.54f, stiffness = 300f)
         }
     }
 
@@ -121,7 +121,15 @@ object FluidSprings {
         return if (reduceMotion) {
             tween(durationMillis = 150)
         } else {
-            spring(dampingRatio = 1.0f, stiffness = 200f)
+            spring(dampingRatio = 0.72f, stiffness = 240f)
+        }
+    }
+
+    fun <T> bubbly(reduceMotion: Boolean = false): FiniteAnimationSpec<T> {
+        return if (reduceMotion) {
+            tween(durationMillis = 150)
+        } else {
+            spring(dampingRatio = 0.35f, stiffness = 400f)
         }
     }
 }

@@ -104,12 +104,6 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         initialValue = FlowUiState()
     )
 
-    init {
-        viewModelScope.launch {
-            repository.seedInitialDataIfNeeded()
-        }
-    }
-
     fun selectTab(tab: FlowTab) {
         _localFlags.update { it.copy(selectedTab = tab) }
     }

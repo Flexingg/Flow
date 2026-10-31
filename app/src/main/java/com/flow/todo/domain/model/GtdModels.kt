@@ -47,5 +47,6 @@ data class AccessibilityPreferences(
     val reduceTransparency: Boolean = false,
     val reduceMotion: Boolean = false,
     val increasedContrast: Boolean = false,
-    val darkThemeOverride: Boolean? = null // null = follow system, true = dark, false = light
+    val darkThemeOverride: Boolean? = null, // null = follow system, true = dark, false = light
+    val useDynamicColor: Boolean = true
 )

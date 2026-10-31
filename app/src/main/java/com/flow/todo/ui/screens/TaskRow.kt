@@ -1,7 +1,19 @@
 package com.flow.todo.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,25 +88,66 @@ fun TaskRow(
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val isReducedMotion = FluidTheme.isReducedMotion
     val accentTint = project?.let { Color(it.colorHex) } ?: FluidTheme.colors.accent
+
+    // Bubbly Checkbox Spring Spec
+    val checkboxSpringSpec: FiniteAnimationSpec<Float> = if (isReducedMotion) {
+        tween(durationMillis = 150)
+    } else {
+        spring(dampingRatio = 0.35f, stiffness = 420f)
+    }
 
     val checkboxScale by animateFloatAsState(
         targetValue = if (task.isCompleted) 1.0f else 0.92f,
-        animationSpec = FluidSprings.release(FluidTheme.isReducedMotion),
+        animationSpec = checkboxSpringSpec,
         label = "checkboxScale"
     )
 
+    // Bubble Ring Burst Animatable
+    val burstAnimatable = remember { Animatable(0f) }
+    LaunchedEffect(task.isCompleted) {
+        if (task.isCompleted && !isReducedMotion) {
+            burstAnimatable.snapTo(0f)
+            burstAnimatable.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+            )
+        } else {
+            burstAnimatable.snapTo(0f)
+        }
+    }
+    val burstProgress = burstAnimatable.value
+
     val checkboxBgColor by animateColorAsState(
         targetValue = if (task.isCompleted) accentTint else Color.Transparent,
-        animationSpec = FluidSprings.morph(FluidTheme.isReducedMotion),
+        animationSpec = FluidSprings.morph(isReducedMotion),
         label = "checkboxBg"
     )
 
     val checkboxBorderColor by animateColorAsState(
         targetValue = if (task.isCompleted) accentTint else FluidTheme.colors.textTertiary.copy(alpha = 0.35f),
-        animationSpec = FluidSprings.morph(FluidTheme.isReducedMotion),
+        animationSpec = FluidSprings.morph(isReducedMotion),
         label = "checkboxBorder"
     )
+
+    // Bubbly row scale pulse when completed
+    val rowScale by animateFloatAsState(
+        targetValue = if (task.isCompleted) 0.985f else 1.0f,
+        animationSpec = FluidSprings.release(isReducedMotion),
+        label = "taskRowScale"
+    )
+
+    // Title color smooth transition
+    val titleColor by animateColorAsState(
+        targetValue = if (task.isCompleted) FluidTheme.colors.textTertiary else FluidTheme.colors.textPrimary,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "taskTitleColor"
+    )
+
+    // Bouncy bubble badge entrance/exit specs
+    val badgeEnter = scaleIn(FluidSprings.release(isReducedMotion)) + expandHorizontally()
+    val badgeExit = scaleOut(FluidSprings.release(isReducedMotion)) + shrinkHorizontally()
 
     val menuActions = remember(task, project) {
         listOf(
@@ -141,6 +198,10 @@ fun TaskRow(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = rowScale
+                scaleY = rowScale
+            }
             .defaultMinSize(minHeight = 56.dp)
             .fluidInteractive(pressScale = 0.98f, onClick = { menuExpanded = true })
             .padding(horizontal = FluidSpacing.md, vertical = FluidSpacing.sm)
@@ -149,10 +210,33 @@ fun TaskRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Tactile Circular Checkbox (24.dp) with 44.dp minimum touch target
+            // Tactile Circular Checkbox (24.dp) with 44.dp touch target & Bubble Ring Burst
             Box(
                 modifier = Modifier
                     .size(44.dp)
+                    .drawBehind {
+                        if (burstProgress > 0f && burstProgress < 1f) {
+                            val minRadius = 12.dp.toPx()
+                            val maxRadius = size.minDimension * 0.48f
+                            val currentRadius = minRadius + (maxRadius - minRadius) * burstProgress
+                            val burstAlpha = ((1f - burstProgress) * 0.75f).coerceIn(0f, 1f)
+                            val strokeWidth = (3.dp.toPx() * (1f - burstProgress)).coerceAtLeast(1.5f)
+
+                            // Expanding outer bubble ring
+                            drawCircle(
+                                color = accentTint.copy(alpha = burstAlpha),
+                                radius = currentRadius,
+                                center = center,
+                                style = Stroke(width = strokeWidth)
+                            )
+                            // Soft inner burst halo
+                            drawCircle(
+                                color = accentTint.copy(alpha = burstAlpha * 0.35f),
+                                radius = currentRadius * 0.85f,
+                                center = center
+                            )
+                        }
+                    }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = false, radius = 22.dp),
@@ -181,7 +265,19 @@ fun TaskRow(
                         .border(1.5.dp, checkboxBorderColor, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (task.isCompleted) {
+                    this@Row.AnimatedVisibility(
+                        visible = task.isCompleted,
+                        enter = if (isReducedMotion) {
+                            fadeIn(tween(150))
+                        } else {
+                            scaleIn(spring(dampingRatio = 0.35f, stiffness = 500f)) + fadeIn(tween(100))
+                        },
+                        exit = if (isReducedMotion) {
+                            fadeOut(tween(150))
+                        } else {
+                            scaleOut(spring(dampingRatio = 0.5f, stiffness = 500f)) + fadeOut(tween(100))
+                        }
+                    ) {
                         Icon(
                             imageVector = Icons.Rounded.Check,
                             contentDescription = "Completed",
@@ -204,11 +300,7 @@ fun TaskRow(
                     text = task.title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (task.isCompleted) {
-                        FluidTheme.colors.textTertiary
-                    } else {
-                        FluidTheme.colors.textPrimary
-                    },
+                    color = titleColor,
                     textDecoration = if (task.isCompleted) {
                         TextDecoration.LineThrough
                     } else {
@@ -230,13 +322,17 @@ fun TaskRow(
                     )
                 }
 
-                // Badges row: Project, Due Date, Flag
+                // Badges row: Project, Due Date, Flag with bubbly micro-interactions
                 val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged
-                if (hasBadges) {
-                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                this@Column.AnimatedVisibility(
+                    visible = hasBadges,
+                    enter = badgeEnter,
+                    exit = badgeExit
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = FluidSpacing.xs)
                     ) {
                         // Project Badge
                         if (project != null) {
@@ -310,8 +406,12 @@ fun TaskRow(
                             }
                         }
 
-                        // Priority Flag
-                        if (task.isFlagged) {
+                        // Priority Flag - Bubbly pop-in
+                        this@Row.AnimatedVisibility(
+                            visible = task.isFlagged,
+                            enter = badgeEnter,
+                            exit = badgeExit
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .clip(FluidShapes.full)

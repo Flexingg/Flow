@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -117,9 +118,9 @@ fun Modifier.fluidGlass(
 
 /**
  * ColorOS 17 Living Flow interactive modifier:
- * - Springs scale to [pressScale] on press and rebounds on release
- * - Rubber-band stretching (+6% along primary drag axis, -3% cross axis) when [enableStretch] is true
- * - Touch Glow radial highlight centered at the pointer position
+ * - Springs scale to [pressScale] with asymmetric squash-and-stretch physics
+ * - Bubbly rubber-band stretching (+9% along primary drag axis, -4.5% cross axis) when [enableStretch] is true
+ * - Luminous expanding Bubbly Ripple Bloom centered at the pointer position
  * - Light haptic tick on press
  */
 @Composable
@@ -147,22 +148,41 @@ fun Modifier.fluidInteractive(
         label = "fluidPressScale"
     )
 
-    // Touch Glow alpha: 14% light / 10% dark on press, fades out over 250ms on release
+    // Asymmetric squash-and-stretch on press: widens slightly along X and compresses along Y
+    val squashX by animateFloatAsState(
+        targetValue = if (isPressed && enabled && !isReducedMotion) 1.035f else 1.0f,
+        animationSpec = if (isPressed) FluidSprings.press(isReducedMotion) else FluidSprings.release(isReducedMotion),
+        label = "fluidSquashX"
+    )
+    val squashY by animateFloatAsState(
+        targetValue = if (isPressed && enabled && !isReducedMotion) 0.965f else 1.0f,
+        animationSpec = if (isPressed) FluidSprings.press(isReducedMotion) else FluidSprings.release(isReducedMotion),
+        label = "fluidSquashY"
+    )
+
+    // Expanding Bubbly Ripple Bloom: radius springs from 0.35f to 1.25f on press
+    val glowRadiusFraction by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 1.25f else 0.35f,
+        animationSpec = FluidSprings.morph(isReducedMotion),
+        label = "fluidGlowRadiusFraction"
+    )
+
+    // Touch Glow alpha: 22% light / 18% dark on press, fades out over 280ms on release
     val glowAlpha by animateFloatAsState(
         targetValue = if (isPressed && enabled) {
-            if (isDark) 0.10f else 0.14f
+            if (isDark) 0.18f else 0.22f
         } else {
             0f
         },
         animationSpec = if (isPressed) {
             tween(durationMillis = 40)
         } else {
-            tween(durationMillis = 250)
+            tween(durationMillis = 280)
         },
         label = "fluidTouchGlow"
     )
 
-    // Calculate stretch factors along primary drag axis
+    // Calculate stretch factors along primary drag axis (+9% primary, -4.5% cross axis)
     val (stretchX, stretchY) = remember(dragDelta, enableStretch, isReducedMotion) {
         if (!enableStretch || isReducedMotion || dragDelta == Offset.Zero) {
             1f to 1f
@@ -172,9 +192,9 @@ fun Modifier.fluidInteractive(
             val primary = max(absX, absY)
             val factor = (primary / 160f).coerceIn(0f, 1f)
             if (absX >= absY) {
-                (1f + 0.06f * factor) to (1f - 0.03f * factor)
+                (1f + 0.09f * factor) to (1f - 0.045f * factor)
             } else {
-                (1f - 0.03f * factor) to (1f + 0.06f * factor)
+                (1f - 0.045f * factor) to (1f + 0.09f * factor)
             }
         }
     }
@@ -239,17 +259,21 @@ fun Modifier.fluidInteractive(
         .then(semanticsModifier)
         .then(pointerModifier)
         .graphicsLayer {
-            scaleX = currentPressScale * animatedStretchX
-            scaleY = currentPressScale * animatedStretchY
+            scaleX = currentPressScale * squashX * animatedStretchX
+            scaleY = currentPressScale * squashY * animatedStretchY
         }
         .drawWithContent {
             drawContent()
             if (glowAlpha > 0.001f) {
-                val glowRadius = (size.minDimension * 0.95f).coerceAtLeast(100f)
+                val baseGlowRadius = (size.minDimension * 0.95f).coerceAtLeast(100f)
+                val glowRadius = baseGlowRadius * glowRadiusFraction
+                val accentColor = FluidTheme.colors.accent
+                val bloomTint = lerp(Color.White, accentColor.copy(alpha = 0.35f), 0.40f)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = glowAlpha),
+                            bloomTint.copy(alpha = glowAlpha),
+                            accentColor.copy(alpha = glowAlpha * 0.50f),
                             Color.Transparent
                         ),
                         center = touchOffset,

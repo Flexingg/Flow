@@ -1,7 +1,20 @@
 package com.flow.todo.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,8 +50,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -60,7 +76,9 @@ import kotlin.math.roundToInt
  * ColorOS 17 Floating Island Navigation Bar:
  * - Horizontally inset 20.dp, floating 16.dp above navigation bar insets
  * - Left pill island displaying FlowTab items with sliding spring-morphing indicator and swipe support
- * - Separate 60.dp circular glass '+' Quick-Capture button on the right with accent contour glow
+ * - Bubbly tab icon scaling and bounce offset
+ * - Pop-in/pop-out Inbox badge count pill
+ * - Detached 60.dp circular glass '+' Quick-Capture button with breathing halo glow and bubbly press physics
  */
 @Composable
 fun FluidIslandNavBar(
@@ -105,13 +123,14 @@ fun FluidIslandNavBar(
                 val targetIndex = selectedTab.ordinal.toFloat()
                 val animatedIndex by animateFloatAsState(
                     targetValue = targetIndex,
-                    animationSpec = FluidSprings.morph(isReducedMotion),
+                    animationSpec = FluidSprings.release(isReducedMotion),
                     label = "islandTabIndex"
                 )
 
-                // Stretch effect during transitions
+                // Stretch effect during transitions: stretches horizontally and squishes vertically
                 val transitionDelta = abs(targetIndex - animatedIndex)
-                val stretchBonusDp = (transitionDelta * 6f).dp
+                val stretchBonusDp = (transitionDelta * 20f).dp
+                val indicatorSquishY = 1f - (transitionDelta * 0.16f).coerceIn(0f, 0.22f)
 
                 // Sliding inner pill indicator
                 Box(
@@ -120,18 +139,27 @@ fun FluidIslandNavBar(
                         .offset(x = tabWidth * animatedIndex - (stretchBonusDp / 2f))
                         .width(tabWidth + stretchBonusDp)
                         .fillMaxHeight()
+                        .graphicsLayer {
+                            scaleY = indicatorSquishY
+                        }
                         .shadow(
-                            elevation = 3.dp,
+                            elevation = 4.dp,
                             shape = FluidShapes.full,
-                            spotColor = if (colors.isDark) Color(0x66000000) else Color(0x1F000000)
+                            spotColor = colors.accent.copy(alpha = if (colors.isDark) 0.35f else 0.25f)
                         )
                         .clip(FluidShapes.full)
                         .background(
-                            if (colors.isDark) {
-                                Color.White.copy(alpha = 0.14f)
-                            } else {
-                                Color.White.copy(alpha = 0.90f)
-                            }
+                            colors.accent.copy(alpha = if (colors.isDark) 0.24f else 0.16f)
+                        )
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.verticalGradient(
+                                listOf(
+                                    colors.accent.copy(alpha = if (colors.isDark) 0.70f else 0.50f),
+                                    colors.accent.copy(alpha = if (colors.isDark) 0.25f else 0.15f)
+                                )
+                            ),
+                            shape = FluidShapes.full
                         )
                 )
 
@@ -180,6 +208,17 @@ fun FluidIslandNavBar(
                         val isSelected = tab == selectedTab
                         val tabInteractionSource = remember { MutableInteractionSource() }
 
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.18f else 0.92f,
+                            animationSpec = FluidSprings.bubbly(isReducedMotion),
+                            label = "tabIconScale_${tab.name}"
+                        )
+                        val iconOffsetY by animateDpAsState(
+                            targetValue = if (isSelected) (-2).dp else 0.dp,
+                            animationSpec = FluidSprings.bubbly(isReducedMotion),
+                            label = "tabIconOffset_${tab.name}"
+                        )
+
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -210,25 +249,37 @@ fun FluidIslandNavBar(
                                         imageVector = icon,
                                         contentDescription = tab.label,
                                         tint = if (isSelected) colors.accent else colors.textSecondary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier
+                                            .offset(y = iconOffsetY)
+                                            .graphicsLayer {
+                                                scaleX = iconScale
+                                                scaleY = iconScale
+                                            }
+                                            .size(20.dp)
                                     )
 
-                                    if (tab == FlowTab.INBOX && inboxBadgeCount > 0) {
-                                        Box(
-                                            modifier = Modifier
-                                                .offset(x = 10.dp, y = (-5).dp)
-                                                .clip(FluidShapes.full)
-                                                .background(colors.accent)
-                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    if (tab == FlowTab.INBOX) {
+                                        this@Column.AnimatedVisibility(
+                                            visible = inboxBadgeCount > 0,
+                                            enter = scaleIn(animationSpec = FluidSprings.bubbly(isReducedMotion)) + fadeIn(),
+                                            exit = scaleOut() + fadeOut()
                                         ) {
-                                            Text(
-                                                text = if (inboxBadgeCount > 99) "99+" else inboxBadgeCount.toString(),
-                                                color = Color.White,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                lineHeight = 10.sp,
-                                                textAlign = TextAlign.Center
-                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .offset(x = 10.dp, y = (-5).dp)
+                                                    .clip(FluidShapes.full)
+                                                    .background(colors.accent)
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (inboxBadgeCount > 99) "99+" else inboxBadgeCount.toString(),
+                                                    color = Color.White,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    lineHeight = 10.sp,
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -253,28 +304,78 @@ fun FluidIslandNavBar(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Circular Glass Quick-Capture Button
+        // Circular Glass Quick-Capture Button with breathing halo glow and bubbly press scale
+        val haloTransition = rememberInfiniteTransition(label = "quickAddHaloTransition")
+        val haloAlpha by haloTransition.animateFloat(
+            initialValue = if (colors.isDark) 0.20f else 0.28f,
+            targetValue = if (colors.isDark) 0.50f else 0.58f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "quickAddHaloAlpha"
+        )
+        val haloScale by haloTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.16f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "quickAddHaloScale"
+        )
+
         Box(
-            modifier = Modifier
-                .size(60.dp)
-                .fluidGlass(
-                    level = GlassLevel.REGULAR,
-                    shape = CircleShape,
-                    isSelected = true,
-                    accentColor = colors.accent
-                )
-                .fluidInteractive(
-                    pressScale = 0.92f,
-                    onClick = onQuickAddClick
-                ),
+            modifier = Modifier.size(60.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Add,
-                contentDescription = "Quick Add",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
+            if (!isReducedMotion) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .graphicsLayer {
+                            scaleX = haloScale
+                            scaleY = haloScale
+                            alpha = haloAlpha
+                        }
+                        .drawBehind {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        colors.accent.copy(alpha = 0.50f),
+                                        colors.accent.copy(alpha = 0.15f),
+                                        Color.Transparent
+                                    ),
+                                    radius = size.width * 0.70f
+                                ),
+                                radius = size.width * 0.70f
+                            )
+                        }
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .fluidGlass(
+                        level = GlassLevel.REGULAR,
+                        shape = CircleShape,
+                        isSelected = true,
+                        accentColor = colors.accent
+                    )
+                    .fluidInteractive(
+                        pressScale = 0.86f,
+                        onClick = onQuickAddClick
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "Quick Add",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     }
 }

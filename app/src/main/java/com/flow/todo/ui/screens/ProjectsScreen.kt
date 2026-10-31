@@ -1,11 +1,16 @@
 package com.flow.todo.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -95,6 +102,7 @@ fun ProjectsScreen(
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
 ) {
+    val isReducedMotion = FluidTheme.isReducedMotion
     var showCreateDialog by remember { mutableStateOf(false) }
     // Project ID -> expanded state (defaults to true)
     val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
@@ -169,7 +177,7 @@ fun ProjectsScreen(
 
                 val rotationAngle by animateFloatAsState(
                     targetValue = if (isExpanded) 180f else 0f,
-                    animationSpec = FluidSprings.release(FluidTheme.isReducedMotion),
+                    animationSpec = FluidSprings.release(isReducedMotion),
                     label = "arrowRotation"
                 )
 
@@ -213,11 +221,27 @@ fun ProjectsScreen(
                                     fontWeight = FontWeight.SemiBold,
                                     color = FluidTheme.colors.textPrimary
                                 )
-                                Text(
-                                    text = "${projectWithStats.completedCount}/${projectWithStats.totalCount} completed",
-                                    fontSize = 12.sp,
-                                    color = FluidTheme.colors.textSecondary
-                                )
+                                // Project Completion Counters AnimatedContent
+                                AnimatedContent(
+                                    targetState = projectWithStats.completedCount to projectWithStats.totalCount,
+                                    transitionSpec = {
+                                        if (isReducedMotion) {
+                                            fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                        } else {
+                                            (scaleIn(initialScale = 0.85f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
+                                                .togetherWith(
+                                                    scaleOut(targetScale = 0.85f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
+                                                )
+                                        }
+                                    },
+                                    label = "projectStatsCount"
+                                ) { (completed, total) ->
+                                    Text(
+                                        text = "$completed/$total completed",
+                                        fontSize = 12.sp,
+                                        color = FluidTheme.colors.textSecondary
+                                    )
+                                }
                             }
                         }
 
@@ -257,11 +281,11 @@ fun ProjectsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Expandable Task List
+                    // Bouncy Expandable Task List via FluidSprings.morph
                     AnimatedVisibility(
                         visible = isExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) + fadeIn(tween(180)),
+                        exit = shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) + fadeOut(tween(150))
                     ) {
                         Column(modifier = Modifier.padding(top = FluidSpacing.sm)) {
                             if (projectWithStats.tasks.isEmpty()) {
@@ -273,22 +297,42 @@ fun ProjectsScreen(
                                 )
                             } else {
                                 projectWithStats.tasks.forEachIndexed { taskIndex, task ->
-                                    if (taskIndex > 0) {
-                                        HorizontalDivider(
-                                            thickness = 1.dp,
-                                            color = FluidTheme.colors.divider,
-                                            modifier = Modifier.padding(horizontal = FluidSpacing.md)
-                                        )
+                                    key(task.id) {
+                                        AnimatedVisibility(
+                                            visible = true,
+                                            enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                                    expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleIn(
+                                                        initialScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    ),
+                                            exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                                    shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleOut(
+                                                        targetScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    )
+                                        ) {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                if (taskIndex > 0) {
+                                                    HorizontalDivider(
+                                                        thickness = 1.dp,
+                                                        color = FluidTheme.colors.divider,
+                                                        modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                    )
+                                                }
+                                                TaskRow(
+                                                    task = task,
+                                                    project = project,
+                                                    onToggleComplete = { onToggleComplete(task.id) },
+                                                    onToggleFlag = { onToggleFlag(task.id) },
+                                                    onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                    onAssignToday = { onAssignToday(task.id) },
+                                                    onDelete = { onDeleteTask(task.id) }
+                                                )
+                                            }
+                                        }
                                     }
-                                    TaskRow(
-                                        task = task,
-                                        project = project,
-                                        onToggleComplete = { onToggleComplete(task.id) },
-                                        onToggleFlag = { onToggleFlag(task.id) },
-                                        onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
-                                        onAssignToday = { onAssignToday(task.id) },
-                                        onDelete = { onDeleteTask(task.id) }
-                                    )
                                 }
                             }
                         }
@@ -342,18 +386,34 @@ fun ProjectsScreen(
                         }
                     }
 
+                    // Someday task count badge with bouncy AnimatedContent
                     Box(
                         modifier = Modifier
                             .clip(FluidShapes.full)
                             .background(FluidTheme.colors.divider)
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
-                        Text(
-                            text = "${somedayTasks.size}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = FluidTheme.colors.textSecondary
-                        )
+                        AnimatedContent(
+                            targetState = somedayTasks.size,
+                            transitionSpec = {
+                                if (isReducedMotion) {
+                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                } else {
+                                    (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
+                                        .togetherWith(
+                                            scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
+                                        )
+                                }
+                            },
+                            label = "somedayTasksCount"
+                        ) { count ->
+                            Text(
+                                text = "$count",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                        }
                     }
                 }
 
@@ -368,22 +428,42 @@ fun ProjectsScreen(
                     )
                 } else {
                     somedayTasks.forEachIndexed { index, task ->
-                        if (index > 0) {
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = FluidTheme.colors.divider,
-                                modifier = Modifier.padding(horizontal = FluidSpacing.md)
-                            )
+                        key(task.id) {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                        expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                        scaleIn(
+                                            initialScale = 0.95f,
+                                            animationSpec = FluidSprings.release(isReducedMotion)
+                                        ),
+                                exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                        shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                        scaleOut(
+                                            targetScale = 0.95f,
+                                            animationSpec = FluidSprings.release(isReducedMotion)
+                                        )
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    if (index > 0) {
+                                        HorizontalDivider(
+                                            thickness = 1.dp,
+                                            color = FluidTheme.colors.divider,
+                                            modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                        )
+                                    }
+                                    TaskRow(
+                                        task = task,
+                                        project = allProjects.find { it.id == task.projectId },
+                                        onToggleComplete = { onToggleComplete(task.id) },
+                                        onToggleFlag = { onToggleFlag(task.id) },
+                                        onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                        onAssignToday = { onAssignToday(task.id) },
+                                        onDelete = { onDeleteTask(task.id) }
+                                    )
+                                }
+                            }
                         }
-                        TaskRow(
-                            task = task,
-                            project = allProjects.find { it.id == task.projectId },
-                            onToggleComplete = { onToggleComplete(task.id) },
-                            onToggleFlag = { onToggleFlag(task.id) },
-                            onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
-                            onAssignToday = { onAssignToday(task.id) },
-                            onDelete = { onDeleteTask(task.id) }
-                        )
                     }
                 }
             }
@@ -476,7 +556,7 @@ fun ProjectsScreen(
 
                     Spacer(modifier = Modifier.height(FluidSpacing.sm))
 
-                    // 6 Color Accent Swatches
+                    // 6 Color Accent Swatches with bouncy selection scale pulse
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -486,9 +566,19 @@ fun ProjectsScreen(
                             val swatchColor = Color(colorHex)
                             val isSelected = selectedColorHex == colorHex
 
+                            val swatchScale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.20f else 0.95f,
+                                animationSpec = FluidSprings.release(isReducedMotion),
+                                label = "swatchBounce_$colorHex"
+                            )
+
                             Box(
                                 modifier = Modifier
                                     .size(38.dp)
+                                    .graphicsLayer {
+                                        scaleX = swatchScale
+                                        scaleY = swatchScale
+                                    }
                                     .clip(CircleShape)
                                     .background(swatchColor)
                                     .border(

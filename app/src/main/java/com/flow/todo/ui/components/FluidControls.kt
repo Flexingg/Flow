@@ -1,7 +1,14 @@
 package com.flow.todo.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -83,6 +90,7 @@ data class FluidMenuAction(
  * - surfaceSolid in light mode, surfaceRaised with subtle contour glow in dark mode
  * - 16.dp inner content padding
  * - Optional accentGlowColor for highlighted/selected states
+ * - Elastic animateContentSize with FluidSprings.morph
  */
 @Composable
 fun FluidInsetCard(
@@ -146,6 +154,7 @@ fun FluidInsetCard(
 
     Column(
         modifier = modifier
+            .animateContentSize(animationSpec = FluidSprings.morph(FluidTheme.isReducedMotion))
             .then(backgroundModifier)
             .padding(16.dp),
         content = content
@@ -156,7 +165,8 @@ fun FluidInsetCard(
  * ColorOS 17 Pill Button:
  * - Height 48.dp, FluidShapes.full (pill)
  * - Filled accent when isPrimary, glass.thin tonal pill when secondary
- * - Interactive spring press feedback (pressScale = 0.94f)
+ * - Interactive bubbly spring press feedback (pressScale = 0.90f)
+ * - Animated background color and Material You accent glow
  */
 @Composable
 fun FluidPillButton(
@@ -168,31 +178,42 @@ fun FluidPillButton(
     leadingIcon: ImageVector? = null
 ) {
     val colors = FluidTheme.colors
+    val isReducedMotion = FluidTheme.isReducedMotion
+
+    val targetBgColor = when {
+        !enabled -> if (isPrimary) colors.accent.copy(alpha = 0.35f) else Color.Transparent
+        isPrimary -> colors.accent
+        else -> Color.Transparent
+    }
+    val animatedBgColor by animateColorAsState(
+        targetValue = targetBgColor,
+        animationSpec = FluidSprings.gentle(isReducedMotion),
+        label = "pillButtonBgColor"
+    )
 
     val buttonModifier = if (isPrimary) {
-        val backgroundColor = if (enabled) colors.accent else colors.accent.copy(alpha = 0.45f)
         Modifier
             .height(48.dp)
             .shadow(
                 elevation = if (enabled) 6.dp else 0.dp,
                 shape = FluidShapes.full,
-                spotColor = colors.accent.copy(alpha = 0.40f)
+                spotColor = colors.accent.copy(alpha = 0.45f)
             )
             .clip(FluidShapes.full)
-            .background(backgroundColor)
+            .background(animatedBgColor)
             .border(
                 1.dp,
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = if (enabled) 0.35f else 0.10f),
-                        Color.Transparent
+                        Color.White.copy(alpha = if (enabled) 0.38f else 0.10f),
+                        colors.accent.copy(alpha = 0.20f)
                     )
                 ),
                 FluidShapes.full
             )
             .fluidInteractive(
                 enabled = enabled,
-                pressScale = 0.94f,
+                pressScale = 0.90f,
                 onClick = onClick
             )
     } else {
@@ -204,7 +225,7 @@ fun FluidPillButton(
             )
             .fluidInteractive(
                 enabled = enabled,
-                pressScale = 0.94f,
+                pressScale = 0.90f,
                 onClick = onClick
             )
     }
@@ -248,7 +269,7 @@ fun FluidPillButton(
  * ColorOS 17 Filter Chip:
  * - FluidShapes.full pill chip
  * - fluidGlass(GlassLevel.THIN) with active accent contour glow when selected
- * - Interactive spring press feedback
+ * - Immediate bubbly pop scaling (1.04f) and elastic animateContentSize
  */
 @Composable
 fun FluidFilterChip(
@@ -260,13 +281,25 @@ fun FluidFilterChip(
     leadingIcon: ImageVector? = null
 ) {
     val colors = FluidTheme.colors
+    val isReducedMotion = FluidTheme.isReducedMotion
     val effectiveAccent = accentColor ?: colors.accent
 
     val textColor = if (selected) effectiveAccent else colors.textPrimary
     val iconColor = if (selected) effectiveAccent else colors.textSecondary
 
+    val chipScale by animateFloatAsState(
+        targetValue = if (selected) 1.04f else 1.0f,
+        animationSpec = FluidSprings.bubbly(isReducedMotion),
+        label = "filterChipScale"
+    )
+
     Box(
         modifier = modifier
+            .animateContentSize(animationSpec = FluidSprings.bubbly(isReducedMotion))
+            .graphicsLayer {
+                scaleX = chipScale
+                scaleY = chipScale
+            }
             .height(36.dp)
             .fluidGlass(
                 level = GlassLevel.THIN,
@@ -309,7 +342,8 @@ fun FluidFilterChip(
 /**
  * ColorOS 17 Luminous Progress Bar:
  * - 8.dp track, rounded full
- * - Luminous gradient fill with glowing "comet" highlight circle at leading edge of progress
+ * - Luminous gradient fill animated with FluidSprings.release
+ * - Breathing pulse halo on the glowing comet head circle
  */
 @Composable
 fun FluidGlowingProgressBar(
@@ -324,8 +358,19 @@ fun FluidGlowingProgressBar(
     val clampedProgress = progress.coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(
         targetValue = clampedProgress,
-        animationSpec = FluidSprings.morph(isReducedMotion),
+        animationSpec = FluidSprings.release(isReducedMotion),
         label = "fluidProgressBarProgress"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "progressBarPulse")
+    val pulseFraction by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cometPulse"
     )
 
     BoxWithConstraints(
@@ -376,14 +421,15 @@ fun FluidGlowingProgressBar(
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackHeightPx / 2f)
                         )
 
-                        // Glowing "Comet" highlight circle at the leading edge
+                        // Glowing "Comet" highlight circle at the leading edge with breathing pulse
+                        val effectivePulse = if (isReducedMotion) 1f else pulseFraction
                         val cometCenter = Offset(fillWidth, centerY)
-                        val cometOuterGlowRadius = 8.dp.toPx()
+                        val cometOuterGlowRadius = 8.dp.toPx() * effectivePulse
                         drawCircle(
                             brush = Brush.radialGradient(
                                 listOf(
-                                    effectiveAccent.copy(alpha = 0.65f),
-                                    effectiveAccent.copy(alpha = 0.20f),
+                                    effectiveAccent.copy(alpha = 0.70f),
+                                    effectiveAccent.copy(alpha = 0.22f),
                                     Color.Transparent
                                 ),
                                 center = cometCenter,
@@ -394,7 +440,7 @@ fun FluidGlowingProgressBar(
                         )
 
                         // Comet core
-                        val cometCoreRadius = 4.5.dp.toPx()
+                        val cometCoreRadius = 4.5.dp.toPx() * ((effectivePulse - 1f) * 0.3f + 1f)
                         drawCircle(
                             color = Color.White,
                             radius = cometCoreRadius,
@@ -409,7 +455,8 @@ fun FluidGlowingProgressBar(
 /**
  * ColorOS 17 Fluid Stretchy Switch:
  * - 52x32.dp pill switch
- * - Thumb stretches horizontally (+20% width) during press/toggle and springs across via FluidSprings.release
+ * - Thumb stretches horizontally (1.34f width) and squishes vertically (0.86f height) during press
+ * - checkFraction rebounds bouncy with FluidSprings.bubbly
  */
 @Composable
 fun FluidStretchySwitch(
@@ -425,16 +472,23 @@ fun FluidStretchySwitch(
 
     val checkFraction by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
-        animationSpec = FluidSprings.release(isReducedMotion),
+        animationSpec = FluidSprings.bubbly(isReducedMotion),
         label = "switchCheckFraction"
     )
 
-    // Stretch width by +20% when pressed
-    val targetStretch = if (isPressed && !isReducedMotion) 1.20f else 1.0f
-    val stretchScale by animateFloatAsState(
-        targetValue = targetStretch,
+    // Stretch width to 1.34f and compress height to 0.86f when pressed
+    val targetStretchWidth = if (isPressed && !isReducedMotion) 1.34f else 1.0f
+    val targetStretchHeight = if (isPressed && !isReducedMotion) 0.86f else 1.0f
+
+    val stretchScaleWidth by animateFloatAsState(
+        targetValue = targetStretchWidth,
         animationSpec = FluidSprings.press(isReducedMotion),
-        label = "switchThumbStretch"
+        label = "switchThumbStretchWidth"
+    )
+    val stretchScaleHeight by animateFloatAsState(
+        targetValue = targetStretchHeight,
+        animationSpec = FluidSprings.press(isReducedMotion),
+        label = "switchThumbStretchHeight"
     )
 
     val trackColor = if (checked) {
@@ -481,13 +535,13 @@ fun FluidStretchySwitch(
     ) {
         val maxOffsetDp = trackWidth - thumbBaseSize - (padding * 2)
         val currentOffsetDp = padding + (maxOffsetDp * checkFraction)
-        val thumbWidthDp = thumbBaseSize * stretchScale
+        val thumbWidthDp = thumbBaseSize * stretchScaleWidth
+        val thumbHeightDp = thumbBaseSize * stretchScaleHeight
 
         Box(
             modifier = Modifier
-                .padding(vertical = padding)
                 .offset(x = currentOffsetDp)
-                .size(width = thumbWidthDp, height = thumbBaseSize)
+                .size(width = thumbWidthDp, height = thumbHeightDp)
                 .shadow(
                     elevation = 3.dp,
                     shape = FluidShapes.full,

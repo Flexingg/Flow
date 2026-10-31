@@ -40,7 +40,8 @@ class FlowRepository(
             reduceTransparency = prefs.getBoolean(KEY_REDUCE_TRANSPARENCY, false),
             reduceMotion = prefs.getBoolean(KEY_REDUCE_MOTION, false),
             increasedContrast = prefs.getBoolean(KEY_INCREASED_CONTRAST, false),
-            darkThemeOverride = darkThemeOverride
+            darkThemeOverride = darkThemeOverride,
+            useDynamicColor = prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true)
         )
     }
 
@@ -84,6 +85,7 @@ class FlowRepository(
             putBoolean(KEY_REDUCE_TRANSPARENCY, updated.reduceTransparency)
             putBoolean(KEY_REDUCE_MOTION, updated.reduceMotion)
             putBoolean(KEY_INCREASED_CONTRAST, updated.increasedContrast)
+            putBoolean(KEY_USE_DYNAMIC_COLOR, updated.useDynamicColor)
             putString(
                 KEY_DARK_THEME_OVERRIDE,
                 when (updated.darkThemeOverride) {
@@ -96,117 +98,12 @@ class FlowRepository(
         }
     }
 
-    suspend fun seedInitialDataIfNeeded() {
-        if (dao.getProjectCount() > 0) return
-
-        val now = System.currentTimeMillis()
-        val todayEpochDay = LocalDate.now().toEpochDay()
-
-        val seedProjects = listOf(
-            Project(
-                id = "proj_work",
-                name = "Product Launch",
-                colorHex = 0xFF2F6BFF,
-                createdAt = now - 86_400_000L * 3
-            ),
-            Project(
-                id = "proj_personal",
-                name = "Life & Wellness",
-                colorHex = 0xFF22B35E,
-                createdAt = now - 86_400_000L * 2
-            ),
-            Project(
-                id = "proj_ideas",
-                name = "Creative Studio",
-                colorHex = 0xFFFF9F0A,
-                createdAt = now - 86_400_000L
-            )
-        )
-
-        val seedTasks = listOf(
-            TaskItem(
-                id = "task_seed_1",
-                title = "Review quarterly user feedback summary",
-                notes = "Identify top 3 friction points and synthesize recurring feature requests",
-                bucket = GtdBucket.INBOX,
-                dueDateEpochDay = null,
-                projectId = "proj_work",
-                isFlagged = false,
-                isCompleted = false,
-                createdAt = now - 3_600_000L * 5,
-                completedAt = null
-            ),
-            TaskItem(
-                id = "task_seed_2",
-                title = "Buy ergonomic desk setup essentials",
-                notes = "Look into curved monitor arm and supportive wrist cushion",
-                bucket = GtdBucket.INBOX,
-                dueDateEpochDay = null,
-                projectId = "proj_personal",
-                isFlagged = false,
-                isCompleted = false,
-                createdAt = now - 3_600_000L * 4,
-                completedAt = null
-            ),
-            TaskItem(
-                id = "task_seed_3",
-                title = "Finalize onboarding flow & microcopy",
-                notes = "Polish welcome steps, keep headings punchy, test tone of voice",
-                bucket = GtdBucket.NEXT_ACTION,
-                dueDateEpochDay = null,
-                projectId = "proj_work",
-                isFlagged = true,
-                isCompleted = false,
-                createdAt = now - 3_600_000L * 3,
-                completedAt = null
-            ),
-            TaskItem(
-                id = "task_seed_4",
-                title = "Schedule annual wellness health checkup",
-                notes = "Contact clinic downtown and confirm insurance network coverage",
-                bucket = GtdBucket.NEXT_ACTION,
-                dueDateEpochDay = null,
-                projectId = "proj_personal",
-                isFlagged = false,
-                isCompleted = false,
-                createdAt = now - 3_600_000L * 2,
-                completedAt = null
-            ),
-            TaskItem(
-                id = "task_seed_5",
-                title = "Roadmap alignment & sprint planning",
-                notes = "Walk through core release milestones with product and design leads",
-                bucket = GtdBucket.SCHEDULED,
-                dueDateEpochDay = todayEpochDay,
-                projectId = "proj_work",
-                isFlagged = true,
-                isCompleted = false,
-                createdAt = now - 3_600_000L,
-                completedAt = null
-            ),
-            TaskItem(
-                id = "task_seed_6",
-                title = "Experiment with generative canvas interactions",
-                notes = "Explore fluid spring physics and particle gestures for creative studio",
-                bucket = GtdBucket.SOMEDAY,
-                dueDateEpochDay = null,
-                projectId = "proj_ideas",
-                isFlagged = false,
-                isCompleted = false,
-                createdAt = now,
-                completedAt = null
-            )
-        )
-
-        dao.upsertProjects(seedProjects.map { it.toEntity() })
-        dao.upsertTasks(seedTasks.map { it.toEntity() })
-    }
-
     companion object {
         private const val PREFS_NAME = "flow_accessibility_prefs"
         private const val KEY_REDUCE_TRANSPARENCY = "reduce_transparency"
         private const val KEY_REDUCE_MOTION = "reduce_motion"
         private const val KEY_INCREASED_CONTRAST = "increased_contrast"
         private const val KEY_DARK_THEME_OVERRIDE = "dark_theme_override"
+        private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
     }
 }

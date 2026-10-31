@@ -1,6 +1,11 @@
 package com.flow.todo.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -113,24 +118,45 @@ fun FlowAppShell(
         bottom = bottomInset + 96.dp
     )
 
+    // Slow ambient breathing glow transition tinted with Material You accent
+    val ambientTransition = rememberInfiniteTransition(label = "ambientGlowTransition")
+    val ambientScale by ambientTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ambientScale"
+    )
+    val ambientAlpha by ambientTransition.animateFloat(
+        initialValue = if (colors.isDark) 0.06f else 0.04f,
+        targetValue = if (colors.isDark) 0.12f else 0.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ambientAlpha"
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(colors.bgBase)
             .drawBehind {
                 // Living Flow ambient soft radial glow centered near the top edge
-                val glowRadius = size.width * 0.9f
-                val glowAlpha = if (colors.isDark) 0.08f else 0.05f
+                val effectiveRadius = (size.width * 0.9f) * (if (isReducedMotion) 1f else ambientScale)
+                val effectiveAlpha = if (isReducedMotion) (if (colors.isDark) 0.08f else 0.05f) else ambientAlpha
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            colors.accent.copy(alpha = glowAlpha),
+                            colors.accent.copy(alpha = effectiveAlpha),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, 0f),
-                        radius = glowRadius
+                        radius = effectiveRadius
                     ),
-                    radius = glowRadius,
+                    radius = effectiveRadius,
                     center = Offset(size.width * 0.5f, 0f)
                 )
             }
@@ -145,21 +171,19 @@ fun FlowAppShell(
                 } else {
                     val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
                     (slideInHorizontally(
-                        animationSpec = FluidSprings.morph(false),
-                        initialOffsetX = { 50 * direction }
-                    ) + fadeIn(
-                        animationSpec = tween(durationMillis = 200)
+                        animationSpec = FluidSprings.morph(false)
+                    ) { (it * 0.18f).toInt() * direction } + fadeIn(
+                        animationSpec = tween(durationMillis = 220)
                     ) + scaleIn(
-                        initialScale = 0.97f,
+                        initialScale = 0.92f,
                         animationSpec = FluidSprings.morph(false)
                     )).togetherWith(
                         slideOutHorizontally(
-                            animationSpec = FluidSprings.morph(false),
-                            targetOffsetX = { -50 * direction }
-                        ) + fadeOut(
-                            animationSpec = tween(durationMillis = 150)
+                            animationSpec = FluidSprings.morph(false)
+                        ) { (-it * 0.18f).toInt() * direction } + fadeOut(
+                            animationSpec = tween(durationMillis = 180)
                         ) + scaleOut(
-                            targetScale = 0.97f,
+                            targetScale = 0.92f,
                             animationSpec = FluidSprings.morph(false)
                         )
                     )
