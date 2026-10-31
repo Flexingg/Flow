@@ -255,6 +255,11 @@ fun Modifier.fluidInteractive(
         Modifier
     }
 
+    val accentColor = FluidTheme.colors.accent
+    val bloomTint = remember(accentColor) {
+        lerp(Color.White, accentColor.copy(alpha = 0.35f), 0.40f)
+    }
+
     return this
         .then(semanticsModifier)
         .then(pointerModifier)
@@ -267,8 +272,6 @@ fun Modifier.fluidInteractive(
             if (glowAlpha > 0.001f) {
                 val baseGlowRadius = (size.minDimension * 0.95f).coerceAtLeast(100f)
                 val glowRadius = baseGlowRadius * glowRadiusFraction
-                val accentColor = FluidTheme.colors.accent
-                val bloomTint = lerp(Color.White, accentColor.copy(alpha = 0.35f), 0.40f)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
