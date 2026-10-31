@@ -98,10 +98,11 @@ fun FlowAppShell(
         FlowTab.TODAY_NEXT -> {
             val total = uiState.totalTodayTargetCount
             val completed = uiState.completedTodayCount
+            val upcoming = uiState.upcomingWeekTotalCount
             "Today & Next" to if (total > 0) {
-                "$completed of $total fulfilled today"
+                "$completed of $total today • $upcoming queued this week"
             } else {
-                "No urgent commitments today"
+                "No urgent commitments today • $upcoming queued this week"
             }
         }
         FlowTab.PROJECTS -> {
@@ -211,6 +212,9 @@ fun FlowAppShell(
                 FlowTab.TODAY_NEXT -> TodayNextScreen(
                     todayTasks = uiState.todayTasks,
                     nextActionTasks = uiState.nextActionTasks,
+                    upcomingWeekDays = uiState.upcomingWeekDays,
+                    laterScheduledTasks = uiState.laterScheduledTasks,
+                    upcomingWeekTotalCount = uiState.upcomingWeekTotalCount,
                     projects = uiState.projects,
                     completedTodayCount = uiState.completedTodayCount,
                     totalTodayTargetCount = uiState.totalTodayTargetCount,
@@ -276,14 +280,15 @@ fun FlowAppShell(
             QuickCaptureSheet(
                 projects = uiState.projects,
                 onDismiss = { viewModel.setQuickCaptureOpen(false) },
-                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged ->
+                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule ->
                     viewModel.addTask(
                         title = title,
                         notes = notes,
                         bucket = bucket,
                         dueDateEpochDay = dueDateEpochDay,
                         projectId = projectId,
-                        isFlagged = isFlagged
+                        isFlagged = isFlagged,
+                        recurrenceRule = recurrenceRule
                     )
                 }
             )

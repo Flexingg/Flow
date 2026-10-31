@@ -9,7 +9,9 @@ import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.ProjectWithStats
+import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.TaskItem
+import com.flow.todo.domain.model.UpcomingDayGroup
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,9 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 import java.util.UUID
 
 data class FlowUiState(
@@ -29,6 +34,9 @@ data class FlowUiState(
     val inboxTasks: List<TaskItem> = emptyList(),
     val todayTasks: List<TaskItem> = emptyList(),
     val nextActionTasks: List<TaskItem> = emptyList(),
+    val upcomingWeekDays: List<UpcomingDayGroup> = emptyList(),
+    val laterScheduledTasks: List<TaskItem> = emptyList(),
+    val upcomingWeekTotalCount: Int = 0,
     val somedayTasks: List<TaskItem> = emptyList(),
     val projectsWithStats: List<ProjectWithStats> = emptyList(),
     val completedTodayCount: Int = 0,
@@ -47,6 +55,7 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
     )
 
     private val _localFlags = MutableStateFlow(LocalUiFlags())
+    private val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
 
     val uiState: StateFlow<FlowUiState> = combine(
         _localFlags,
@@ -54,20 +63,67 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         repository.observeProjects(),
         repository.accessibilityPreferences
     ) { flags, tasks, projects, accessibility ->
-        val todayEpochDay = LocalDate.now().toEpochDay()
+        val today = LocalDate.now()
+        val todayEpochDay = today.toEpochDay()
+        val nextWeekEndEpochDay = today.plusDays(7).toEpochDay()
 
         val inboxTasks = tasks.filter { it.bucket == GtdBucket.INBOX }
 
         val todayTasks = tasks.filter { task ->
             val isDueTodayOrPast = task.dueDateEpochDay != null && task.dueDateEpochDay <= todayEpochDay
+            val isRecurringToday = !task.isCompleted &&
+                task.recurrenceRule?.isRecurring == true &&
+                task.recurrenceRule.occursOnDate(today, task.dueDateEpochDay)
             val isFlaggedActive = task.isFlagged && !task.isCompleted
             val isFlaggedCompletedToday = task.isFlagged && task.isCompleted && isCompletedToday(task.completedAt, todayEpochDay)
-            isDueTodayOrPast || isFlaggedActive || isFlaggedCompletedToday
+            isDueTodayOrPast || isRecurringToday || isFlaggedActive || isFlaggedCompletedToday
         }
 
         val todayTaskIds = todayTasks.map { it.id }.toSet()
         val nextActionTasks = tasks.filter { it.bucket == GtdBucket.NEXT_ACTION && it.id !in todayTaskIds }
         val somedayTasks = tasks.filter { it.bucket == GtdBucket.SOMEDAY }
+
+        // Build 7-day Upcoming Week Queue (Tomorrow through Today + 7 days)
+        val activeTasks = tasks.filter { !it.isCompleted }
+        val upcomingWeekDays = (1L..7L).map { offset ->
+            val targetDate = today.plusDays(offset)
+            val targetEpoch = targetDate.toEpochDay()
+            val dayName = targetDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
+            val dayTitle = when (offset) {
+                1L -> "Tomorrow • $dayName"
+                else -> dayName
+            }
+            val dateSubtitle = targetDate.format(dateFormatter)
+
+            // Match tasks explicitly due on targetEpoch OR recurring tasks whose rule occurs on targetDate
+            val dayTasks = activeTasks.filter { task ->
+                val isExplicitlyDue = task.dueDateEpochDay == targetEpoch
+                val isRecurringMatch = task.recurrenceRule?.isRecurring == true &&
+                    task.recurrenceRule.occursOnDate(targetDate, task.dueDateEpochDay)
+                isExplicitlyDue || isRecurringMatch
+            }.map { task ->
+                if (task.dueDateEpochDay != targetEpoch && task.recurrenceRule?.isRecurring == true) {
+                    // Projected occurrence for this day in the queue
+                    task.copy(dueDateEpochDay = targetEpoch)
+                } else {
+                    task
+                }
+            }
+
+            UpcomingDayGroup(
+                epochDay = targetEpoch,
+                dayTitle = dayTitle,
+                dateSubtitle = dateSubtitle,
+                isTomorrow = offset == 1L,
+                tasks = dayTasks
+            )
+        }
+
+        val laterScheduledTasks = activeTasks.filter { task ->
+            task.dueDateEpochDay != null && task.dueDateEpochDay > nextWeekEndEpochDay
+        }.sortedBy { it.dueDateEpochDay }
+
+        val upcomingWeekTotalCount = upcomingWeekDays.sumOf { it.tasks.size }
 
         val projectsWithStats = projects.map { project ->
             val projectTasks = tasks.filter { it.projectId == project.id }
@@ -90,6 +146,9 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
             inboxTasks = inboxTasks,
             todayTasks = todayTasks,
             nextActionTasks = nextActionTasks,
+            upcomingWeekDays = upcomingWeekDays,
+            laterScheduledTasks = laterScheduledTasks,
+            upcomingWeekTotalCount = upcomingWeekTotalCount,
             somedayTasks = somedayTasks,
             projectsWithStats = projectsWithStats,
             completedTodayCount = completedTodayCount,
@@ -122,18 +181,32 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         bucket: GtdBucket = GtdBucket.INBOX,
         dueDateEpochDay: Long? = null,
         projectId: String? = null,
-        isFlagged: Boolean = false
+        isFlagged: Boolean = false,
+        recurrenceRule: RecurrenceRule? = null
     ) {
         if (title.isBlank()) return
+        val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
+        val effectiveDueDate = when {
+            dueDateEpochDay != null -> dueDateEpochDay
+            hasRecurrence -> recurrenceRule!!.firstMatchingOrAfter(LocalDate.now()).toEpochDay()
+            bucket == GtdBucket.SCHEDULED -> LocalDate.now().toEpochDay()
+            else -> null
+        }
+        val effectiveBucket = if (hasRecurrence && bucket == GtdBucket.INBOX) {
+            GtdBucket.SCHEDULED
+        } else {
+            bucket
+        }
         val newTask = TaskItem(
             id = UUID.randomUUID().toString(),
             title = title.trim(),
             notes = notes.trim(),
-            bucket = bucket,
-            dueDateEpochDay = dueDateEpochDay,
+            bucket = effectiveBucket,
+            dueDateEpochDay = effectiveDueDate,
             projectId = projectId,
             isFlagged = isFlagged,
             isCompleted = false,
+            recurrenceRule = if (hasRecurrence) recurrenceRule else null,
             createdAt = System.currentTimeMillis(),
             completedAt = null
         )
@@ -145,12 +218,36 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
     fun toggleTaskCompletion(taskId: String) {
         val task = uiState.value.allTasks.find { it.id == taskId } ?: return
         val nowCompleted = !task.isCompleted
-        val updatedTask = task.copy(
-            isCompleted = nowCompleted,
-            completedAt = if (nowCompleted) System.currentTimeMillis() else null
-        )
+        val nowMillis = System.currentTimeMillis()
+        val rule = task.recurrenceRule
+
         viewModelScope.launch {
-            repository.upsertTask(updatedTask)
+            if (nowCompleted && rule != null && rule.isRecurring) {
+                // Complete current occurrence and spawn the next recurring occurrence automatically
+                val completedOccurrence = task.copy(
+                    isCompleted = true,
+                    recurrenceRule = null, // Archive completed single instance without duplicating future projections
+                    completedAt = nowMillis
+                )
+                val anchorDay = task.dueDateEpochDay ?: LocalDate.now().toEpochDay()
+                val nextDueEpochDay = rule.nextOccurrenceAfter(anchorDay)
+                val nextOccurrence = task.copy(
+                    id = UUID.randomUUID().toString(),
+                    bucket = GtdBucket.SCHEDULED,
+                    dueDateEpochDay = nextDueEpochDay,
+                    isCompleted = false,
+                    recurrenceRule = rule,
+                    createdAt = nowMillis,
+                    completedAt = null
+                )
+                repository.upsertTasks(listOf(completedOccurrence, nextOccurrence))
+            } else {
+                val updatedTask = task.copy(
+                    isCompleted = nowCompleted,
+                    completedAt = if (nowCompleted) nowMillis else null
+                )
+                repository.upsertTask(updatedTask)
+            }
         }
     }
 
@@ -189,6 +286,29 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         }
         val updatedTask = task.copy(
             dueDateEpochDay = dueDateEpochDay,
+            bucket = updatedBucket
+        )
+        viewModelScope.launch {
+            repository.upsertTask(updatedTask)
+        }
+    }
+
+    fun updateTaskRecurrence(taskId: String, recurrenceRule: RecurrenceRule?) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
+        val nextDue = if (hasRecurrence && task.dueDateEpochDay == null) {
+            recurrenceRule!!.firstMatchingOrAfter(LocalDate.now()).toEpochDay()
+        } else {
+            task.dueDateEpochDay
+        }
+        val updatedBucket = if (hasRecurrence && task.bucket == GtdBucket.INBOX) {
+            GtdBucket.SCHEDULED
+        } else {
+            task.bucket
+        }
+        val updatedTask = task.copy(
+            recurrenceRule = if (hasRecurrence) recurrenceRule else null,
+            dueDateEpochDay = nextDue,
             bucket = updatedBucket
         )
         viewModelScope.launch {

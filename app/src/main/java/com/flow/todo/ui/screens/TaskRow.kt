@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -322,8 +323,8 @@ fun TaskRow(
                     )
                 }
 
-                // Badges row: Project, Due Date, Flag with bubbly micro-interactions
-                val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged
+                // Badges row: Project, Recurrence, Due Date, Flag with bubbly micro-interactions
+                val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged || task.recurrenceRule?.isRecurring == true
                 this@Column.AnimatedVisibility(
                     visible = hasBadges,
                     enter = badgeEnter,
@@ -361,6 +362,35 @@ fun TaskRow(
                                         color = projectColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        // Recurrence Badge
+                        if (task.recurrenceRule?.isRecurring == true) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(FluidTheme.colors.accent.copy(alpha = 0.12f))
+                                    .border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Repeat,
+                                        contentDescription = "Recurring",
+                                        tint = FluidTheme.colors.accent,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = task.recurrenceRule.toDisplayLabel(),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = FluidTheme.colors.accent
                                     )
                                 }
                             }
@@ -407,7 +437,7 @@ fun TaskRow(
                         }
 
                         // Priority Flag - Bubbly pop-in
-                        this@Row.AnimatedVisibility(
+                        androidx.compose.animation.AnimatedVisibility(
                             visible = task.isFlagged,
                             enter = badgeEnter,
                             exit = badgeExit

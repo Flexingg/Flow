@@ -2,6 +2,7 @@ package com.flow.todo.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -9,7 +10,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -32,32 +35,48 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.Upcoming
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
+import com.flow.todo.domain.model.UpcomingDayGroup
 import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidInsetCard
+import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.theme.FluidShapes
 import com.flow.todo.ui.theme.FluidSpacing
 import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
+import com.flow.todo.ui.theme.GlassLevel
+import com.flow.todo.ui.theme.fluidGlass
+import com.flow.todo.ui.theme.fluidInteractive
 
 @Composable
 fun TodayNextScreen(
     todayTasks: List<TaskItem>,
     nextActionTasks: List<TaskItem>,
+    upcomingWeekDays: List<UpcomingDayGroup> = emptyList(),
+    laterScheduledTasks: List<TaskItem> = emptyList(),
+    upcomingWeekTotalCount: Int = 0,
     projects: List<Project>,
     completedTodayCount: Int,
     totalTodayTargetCount: Int,
@@ -71,6 +90,7 @@ fun TodayNextScreen(
     modifier: Modifier = Modifier
 ) {
     val isReducedMotion = FluidTheme.isReducedMotion
+    var selectedMode by remember { mutableIntStateOf(0) } // 0: Today & Next, 1: Next Week Queue
 
     val progressFraction = if (totalTodayTargetCount > 0) {
         (completedTodayCount.toFloat() / totalTodayTargetCount.toFloat()).coerceIn(0f, 1f)
@@ -237,260 +257,795 @@ fun TodayNextScreen(
             }
         }
 
+        // Living Flow Glass Segmented Mode Switcher
         item {
-            Spacer(modifier = Modifier.height(FluidSpacing.lg))
-        }
-
-        // Section 1: Due Today & Flagged
-        item {
-            FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
-                // Section Header
+            Spacer(modifier = Modifier.height(FluidSpacing.md))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fluidGlass(GlassLevel.THIN, FluidShapes.full)
+                    .padding(4.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Mode 0: Today & Next
+                    val isMode0 = selectedMode == 0
+                    val bg0 by animateColorAsState(
+                        targetValue = if (isMode0) FluidTheme.colors.accent.copy(alpha = 0.18f) else Color.Transparent,
+                        animationSpec = FluidSprings.morph(isReducedMotion),
+                        label = "mode0Bg"
+                    )
+                    val text0Color by animateColorAsState(
+                        targetValue = if (isMode0) FluidTheme.colors.accent else FluidTheme.colors.textSecondary,
+                        animationSpec = FluidSprings.morph(isReducedMotion),
+                        label = "mode0TextColor"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(FluidShapes.full)
+                            .background(bg0)
+                            .then(
+                                if (isMode0) Modifier.border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.35f), FluidShapes.full)
+                                else Modifier
+                            )
+                            .fluidInteractive(onClick = { selectedMode = 0 })
+                            .padding(vertical = 10.dp, horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Today,
                                 contentDescription = null,
-                                tint = FluidTheme.colors.accent,
+                                tint = text0Color,
                                 modifier = Modifier.size(16.dp)
                             )
-                        }
-                        Text(
-                            text = "Due Today & Flagged",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = FluidTheme.colors.textPrimary
-                        )
-                    }
-
-                    // Section count badge with bouncy scaleIn pop
-                    Box(
-                        modifier = Modifier
-                            .clip(FluidShapes.full)
-                            .background(FluidTheme.colors.divider)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        AnimatedContent(
-                            targetState = todayTasks.size,
-                            transitionSpec = {
-                                if (isReducedMotion) {
-                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                                } else {
-                                    (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
-                                        .togetherWith(
-                                            scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
-                                        )
-                                }
-                            },
-                            label = "todayTasksCount"
-                        ) { count ->
                             Text(
-                                text = "$count",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = FluidTheme.colors.textSecondary
+                                text = "Today & Next",
+                                fontSize = 13.sp,
+                                fontWeight = if (isMode0) FontWeight.SemiBold else FontWeight.Medium,
+                                color = text0Color
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(FluidSpacing.sm))
-
-                if (todayTasks.isEmpty()) {
-                    Text(
-                        text = "No scheduled or flagged tasks for today.",
-                        fontSize = 14.sp,
-                        color = FluidTheme.colors.textTertiary,
-                        modifier = Modifier.padding(vertical = FluidSpacing.sm, horizontal = FluidSpacing.xs)
+                    // Mode 1: Next Week Queue ($upcomingWeekTotalCount)
+                    val isMode1 = selectedMode == 1
+                    val bg1 by animateColorAsState(
+                        targetValue = if (isMode1) FluidTheme.colors.accent.copy(alpha = 0.18f) else Color.Transparent,
+                        animationSpec = FluidSprings.morph(isReducedMotion),
+                        label = "mode1Bg"
                     )
-                } else {
-                    todayTasks.forEachIndexed { index, task ->
-                        key(task.id) {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
-                                        expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
-                                        scaleIn(
-                                            initialScale = 0.95f,
-                                            animationSpec = FluidSprings.release(isReducedMotion)
-                                        ),
-                                exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
-                                        shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
-                                        scaleOut(
-                                            targetScale = 0.95f,
-                                            animationSpec = FluidSprings.release(isReducedMotion)
-                                        )
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    if (index > 0) {
-                                        HorizontalDivider(
-                                            thickness = 1.dp,
-                                            color = FluidTheme.colors.divider,
-                                            modifier = Modifier.padding(horizontal = FluidSpacing.md)
-                                        )
-                                    }
-                                    TaskRow(
-                                        task = task,
-                                        project = projects.find { it.id == task.projectId },
-                                        onToggleComplete = { onToggleComplete(task.id) },
-                                        onToggleFlag = { onToggleFlag(task.id) },
-                                        onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
-                                        onAssignToday = { onAssignToday(task.id) },
-                                        onDelete = { onDeleteTask(task.id) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(FluidSpacing.lg))
-        }
-
-        // Section 2: Next Actions (GTD Horizon)
-        item {
-            FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
-                // Section Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    val text1Color by animateColorAsState(
+                        targetValue = if (isMode1) FluidTheme.colors.accent else FluidTheme.colors.textSecondary,
+                        animationSpec = FluidSprings.morph(isReducedMotion),
+                        label = "mode1TextColor"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(FluidShapes.full)
+                            .background(bg1)
+                            .then(
+                                if (isMode1) Modifier.border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.35f), FluidShapes.full)
+                                else Modifier
+                            )
+                            .fluidInteractive(onClick = { selectedMode = 1 })
+                            .padding(vertical = 10.dp, horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(FluidTheme.colors.success.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Bolt,
+                                imageVector = Icons.Rounded.Upcoming,
                                 contentDescription = null,
-                                tint = FluidTheme.colors.success,
+                                tint = text1Color,
                                 modifier = Modifier.size(16.dp)
                             )
-                        }
-                        Column {
                             Text(
-                                text = "Next Actions",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FluidTheme.colors.textPrimary
+                                text = "Next Week Queue ($upcomingWeekTotalCount)",
+                                fontSize = 13.sp,
+                                fontWeight = if (isMode1) FontWeight.SemiBold else FontWeight.Medium,
+                                color = text1Color,
+                                maxLines = 1
                             )
-                            Text(
-                                text = "GTD Horizon • Ready to execute",
-                                fontSize = 11.sp,
-                                color = FluidTheme.colors.textTertiary
-                            )
-                        }
-                    }
-
-                    // Section count badge with bouncy scaleIn pop
-                    Box(
-                        modifier = Modifier
-                            .clip(FluidShapes.full)
-                            .background(FluidTheme.colors.divider)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        AnimatedContent(
-                            targetState = nextActionTasks.size,
-                            transitionSpec = {
-                                if (isReducedMotion) {
-                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                                } else {
-                                    (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
-                                        .togetherWith(
-                                            scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
-                                        )
-                                }
-                            },
-                            label = "nextActionsCount"
-                        ) { count ->
-                            Text(
-                                text = "$count",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = FluidTheme.colors.textSecondary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(FluidSpacing.sm))
-
-                if (nextActionTasks.isEmpty()) {
-                    Text(
-                        text = "No pending next actions. Clarify inbox items or add next steps.",
-                        fontSize = 14.sp,
-                        color = FluidTheme.colors.textTertiary,
-                        modifier = Modifier.padding(vertical = FluidSpacing.sm, horizontal = FluidSpacing.xs)
-                    )
-                } else {
-                    nextActionTasks.forEachIndexed { index, task ->
-                        key(task.id) {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
-                                        expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
-                                        scaleIn(
-                                            initialScale = 0.95f,
-                                            animationSpec = FluidSprings.release(isReducedMotion)
-                                        ),
-                                exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
-                                        shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
-                                        scaleOut(
-                                            targetScale = 0.95f,
-                                            animationSpec = FluidSprings.release(isReducedMotion)
-                                        )
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    if (index > 0) {
-                                        HorizontalDivider(
-                                            thickness = 1.dp,
-                                            color = FluidTheme.colors.divider,
-                                            modifier = Modifier.padding(horizontal = FluidSpacing.md)
-                                        )
-                                    }
-                                    TaskRow(
-                                        task = task,
-                                        project = projects.find { it.id == task.projectId },
-                                        onToggleComplete = { onToggleComplete(task.id) },
-                                        onToggleFlag = { onToggleFlag(task.id) },
-                                        onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
-                                        onAssignToday = { onAssignToday(task.id) },
-                                        onDelete = { onDeleteTask(task.id) }
-                                    )
-                                }
-                            }
                         }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(FluidSpacing.md))
         }
 
-        // Floating nav bar clearance spacer
+        // Bouncy animated mode content transition
         item {
-            Spacer(modifier = Modifier.height(100.dp))
+            AnimatedContent(
+                targetState = selectedMode,
+                transitionSpec = {
+                    if (isReducedMotion) {
+                        fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                    } else {
+                        val direction = if (targetState > initialState) 1 else -1
+                        (slideInHorizontally(
+                            animationSpec = FluidSprings.morph(false)
+                        ) { (it * 0.15f).toInt() * direction } + fadeIn(
+                            animationSpec = tween(180)
+                        ) + scaleIn(
+                            initialScale = 0.95f,
+                            animationSpec = FluidSprings.morph(false)
+                        )).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = FluidSprings.morph(false)
+                            ) { (-it * 0.15f).toInt() * direction } + fadeOut(
+                                animationSpec = tween(150)
+                            ) + scaleOut(
+                                targetScale = 0.95f,
+                                animationSpec = FluidSprings.morph(false)
+                            )
+                        )
+                    }
+                },
+                label = "livingFlowModeTransition"
+            ) { mode ->
+                if (mode == 0) {
+                    // MODE 0: Today & Next
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(FluidSpacing.lg)
+                    ) {
+                        // Section 1: Due Today & Flagged
+                        FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Today,
+                                            contentDescription = null,
+                                            tint = FluidTheme.colors.accent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Due Today & Flagged",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = FluidTheme.colors.textPrimary
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(FluidTheme.colors.divider)
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    AnimatedContent(
+                                        targetState = todayTasks.size,
+                                        transitionSpec = {
+                                            if (isReducedMotion) {
+                                                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                            } else {
+                                                (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
+                                                    .togetherWith(
+                                                        scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
+                                                    )
+                                            }
+                                        },
+                                        label = "todayTasksCount"
+                                    ) { count ->
+                                        Text(
+                                            text = "$count",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = FluidTheme.colors.textSecondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                            if (todayTasks.isEmpty()) {
+                                Text(
+                                    text = "No scheduled or flagged tasks for today.",
+                                    fontSize = 14.sp,
+                                    color = FluidTheme.colors.textTertiary,
+                                    modifier = Modifier.padding(vertical = FluidSpacing.sm, horizontal = FluidSpacing.xs)
+                                )
+                            } else {
+                                todayTasks.forEachIndexed { index, task ->
+                                    key(task.id) {
+                                        this@Column.AnimatedVisibility(
+                                            visible = true,
+                                            enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                                    expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleIn(
+                                                        initialScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    ),
+                                            exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                                    shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleOut(
+                                                        targetScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    )
+                                        ) {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        thickness = 1.dp,
+                                                        color = FluidTheme.colors.divider,
+                                                        modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                    )
+                                                }
+                                                TaskRow(
+                                                    task = task,
+                                                    project = projects.find { it.id == task.projectId },
+                                                    onToggleComplete = { onToggleComplete(task.id) },
+                                                    onToggleFlag = { onToggleFlag(task.id) },
+                                                    onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                    onAssignToday = { onAssignToday(task.id) },
+                                                    onDelete = { onDeleteTask(task.id) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Section 2: Next Actions (GTD Horizon)
+                        FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(FluidTheme.colors.success.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Bolt,
+                                            contentDescription = null,
+                                            tint = FluidTheme.colors.success,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Next Actions",
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.textPrimary
+                                        )
+                                        Text(
+                                            text = "GTD Horizon • Ready to execute",
+                                            fontSize = 11.sp,
+                                            color = FluidTheme.colors.textTertiary
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(FluidTheme.colors.divider)
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    AnimatedContent(
+                                        targetState = nextActionTasks.size,
+                                        transitionSpec = {
+                                            if (isReducedMotion) {
+                                                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                            } else {
+                                                (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
+                                                    .togetherWith(
+                                                        scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
+                                                    )
+                                            }
+                                        },
+                                        label = "nextActionsCount"
+                                    ) { count ->
+                                        Text(
+                                            text = "$count",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = FluidTheme.colors.textSecondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                            if (nextActionTasks.isEmpty()) {
+                                Text(
+                                    text = "No pending next actions. Clarify inbox items or add next steps.",
+                                    fontSize = 14.sp,
+                                    color = FluidTheme.colors.textTertiary,
+                                    modifier = Modifier.padding(vertical = FluidSpacing.sm, horizontal = FluidSpacing.xs)
+                                )
+                            } else {
+                                nextActionTasks.forEachIndexed { index, task ->
+                                    key(task.id) {
+                                        this@Column.AnimatedVisibility(
+                                            visible = true,
+                                            enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                                    expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleIn(
+                                                        initialScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    ),
+                                            exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                                    shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion)) +
+                                                    scaleOut(
+                                                        targetScale = 0.95f,
+                                                        animationSpec = FluidSprings.release(isReducedMotion)
+                                                    )
+                                        ) {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        thickness = 1.dp,
+                                                        color = FluidTheme.colors.divider,
+                                                        modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                    )
+                                                }
+                                                TaskRow(
+                                                    task = task,
+                                                    project = projects.find { it.id == task.projectId },
+                                                    onToggleComplete = { onToggleComplete(task.id) },
+                                                    onToggleFlag = { onToggleFlag(task.id) },
+                                                    onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                    onAssignToday = { onAssignToday(task.id) },
+                                                    onDelete = { onDeleteTask(task.id) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Up Next This Week preview card
+                        val upcomingPreviewTasks = remember(upcomingWeekDays) {
+                            upcomingWeekDays.flatMap { day ->
+                                day.tasks.map { task -> day to task }
+                            }.take(3)
+                        }
+
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = FluidTheme.colors.accent.copy(alpha = 0.20f)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.DateRange,
+                                                contentDescription = null,
+                                                tint = FluidTheme.colors.accent,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "Up Next This Week",
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = FluidTheme.colors.textPrimary
+                                            )
+                                            Text(
+                                                text = "Next 7 days preview • $upcomingWeekTotalCount queued",
+                                                fontSize = 11.sp,
+                                                color = FluidTheme.colors.textTertiary
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(FluidShapes.full)
+                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f))
+                                            .border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "$upcomingWeekTotalCount",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.accent
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                                if (upcomingPreviewTasks.isEmpty()) {
+                                    Text(
+                                        text = "Your upcoming week is open. No scheduled commitments or recurring tasks.",
+                                        fontSize = 14.sp,
+                                        color = FluidTheme.colors.textTertiary,
+                                        modifier = Modifier.padding(vertical = FluidSpacing.sm, horizontal = FluidSpacing.xs)
+                                    )
+                                } else {
+                                    upcomingPreviewTasks.forEachIndexed { index, (dayGroup, task) ->
+                                        key("preview_${task.id}_${dayGroup.epochDay}") {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        thickness = 1.dp,
+                                                        color = FluidTheme.colors.divider,
+                                                        modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                    )
+                                                }
+                                                TaskRow(
+                                                    task = task,
+                                                    project = projects.find { it.id == task.projectId },
+                                                    onToggleComplete = { onToggleComplete(task.id) },
+                                                    onToggleFlag = { onToggleFlag(task.id) },
+                                                    onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                    onAssignToday = { onAssignToday(task.id) },
+                                                    onDelete = { onDeleteTask(task.id) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                                FluidPillButton(
+                                    text = "View Full 7-Day Queue →",
+                                    onClick = { selectedMode = 1 },
+                                    isPrimary = false,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Floating nav bar clearance spacer
+                        Spacer(modifier = Modifier.height(100.dp))
+                    }
+                } else {
+                    // MODE 1: Next Week Queue
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(FluidSpacing.lg)
+                    ) {
+                        // 7-Day Horizon Queue Header Card
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = FluidTheme.colors.accent.copy(alpha = 0.35f)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(FluidTheme.colors.accent.copy(alpha = 0.15f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Upcoming,
+                                                contentDescription = null,
+                                                tint = FluidTheme.colors.accent,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = "7-DAY HORIZON QUEUE",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.2.sp,
+                                            color = FluidTheme.colors.accent
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(FluidShapes.full)
+                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f))
+                                            .border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "$upcomingWeekTotalCount queued",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.accent
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                                Text(
+                                    text = "Scheduled tasks and recurring patterns (Daily, Weekly, Monthly) projected across the next 7 days for clear mental space.",
+                                    fontSize = 13.sp,
+                                    color = FluidTheme.colors.textSecondary
+                                )
+                            }
+                        }
+
+                        // Daily groups for the next 7 days
+                        upcomingWeekDays.forEach { dayGroup ->
+                            val hasGlow = dayGroup.isTomorrow || dayGroup.tasks.isNotEmpty()
+                            val glowColor = when {
+                                dayGroup.isTomorrow -> FluidTheme.colors.accent.copy(alpha = 0.30f)
+                                dayGroup.tasks.isNotEmpty() -> FluidTheme.colors.accent.copy(alpha = 0.15f)
+                                else -> null
+                            }
+
+                            FluidInsetCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                accentGlowColor = glowColor
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (dayGroup.isTomorrow) FluidTheme.colors.accent.copy(alpha = 0.15f)
+                                                        else FluidTheme.colors.divider
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (dayGroup.isTomorrow) Icons.Rounded.Today else Icons.Rounded.DateRange,
+                                                    contentDescription = null,
+                                                    tint = if (dayGroup.isTomorrow) FluidTheme.colors.accent else FluidTheme.colors.textSecondary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            Column {
+                                                Text(
+                                                    text = dayGroup.dayTitle,
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (dayGroup.isTomorrow) FluidTheme.colors.accent else FluidTheme.colors.textPrimary
+                                                )
+                                                Text(
+                                                    text = dayGroup.dateSubtitle,
+                                                    fontSize = 12.sp,
+                                                    color = FluidTheme.colors.textTertiary
+                                                )
+                                            }
+                                        }
+
+                                        // Task count pill badge
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(FluidShapes.full)
+                                                .background(
+                                                    if (dayGroup.tasks.isNotEmpty()) FluidTheme.colors.accent.copy(alpha = 0.12f)
+                                                    else FluidTheme.colors.divider
+                                                )
+                                                .then(
+                                                    if (dayGroup.tasks.isNotEmpty()) {
+                                                        Modifier.border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "${dayGroup.tasks.size}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (dayGroup.tasks.isNotEmpty()) FluidTheme.colors.accent else FluidTheme.colors.textTertiary
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                                    if (dayGroup.tasks.isEmpty()) {
+                                        Text(
+                                            text = "Clear day — open for flow",
+                                            fontSize = 13.sp,
+                                            color = FluidTheme.colors.textTertiary,
+                                            modifier = Modifier.padding(vertical = FluidSpacing.xs, horizontal = FluidSpacing.xs)
+                                        )
+                                    } else {
+                                        dayGroup.tasks.forEachIndexed { index, task ->
+                                            key("${dayGroup.epochDay}_${task.id}") {
+                                                androidx.compose.animation.AnimatedVisibility(
+                                                    visible = true,
+                                                    enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                                            expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
+                                                    exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                                            shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion))
+                                                ) {
+                                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                                        if (index > 0) {
+                                                            HorizontalDivider(
+                                                                thickness = 1.dp,
+                                                                color = FluidTheme.colors.divider,
+                                                                modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                            )
+                                                        }
+                                                        TaskRow(
+                                                            task = task,
+                                                            project = projects.find { it.id == task.projectId },
+                                                            onToggleComplete = { onToggleComplete(task.id) },
+                                                            onToggleFlag = { onToggleFlag(task.id) },
+                                                            onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                            onAssignToday = { onAssignToday(task.id) },
+                                                            onDelete = { onDeleteTask(task.id) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Beyond Next Week section if tasks exist
+                        if (laterScheduledTasks.isNotEmpty()) {
+                            FluidInsetCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                accentGlowColor = FluidTheme.colors.warning.copy(alpha = 0.15f)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .background(FluidTheme.colors.warning.copy(alpha = 0.12f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Schedule,
+                                                    contentDescription = null,
+                                                    tint = FluidTheme.colors.warning,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            Column {
+                                                Text(
+                                                    text = "Beyond Next Week",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = FluidTheme.colors.textPrimary
+                                                )
+                                                Text(
+                                                    text = "Future commitments further on the horizon",
+                                                    fontSize = 11.sp,
+                                                    color = FluidTheme.colors.textTertiary
+                                                )
+                                            }
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(FluidShapes.full)
+                                                .background(FluidTheme.colors.warning.copy(alpha = 0.12f))
+                                                .border(1.dp, FluidTheme.colors.warning.copy(alpha = 0.28f), FluidShapes.full)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "${laterScheduledTasks.size}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = FluidTheme.colors.warning
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                                    laterScheduledTasks.forEachIndexed { index, task ->
+                                        key("later_${task.id}") {
+                                            androidx.compose.animation.AnimatedVisibility(
+                                                visible = true,
+                                                enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
+                                                        expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
+                                                exit = fadeOut(FluidSprings.morph(isReducedMotion)) +
+                                                        shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion))
+                                            ) {
+                                                Column(modifier = Modifier.fillMaxWidth()) {
+                                                    if (index > 0) {
+                                                        HorizontalDivider(
+                                                            thickness = 1.dp,
+                                                            color = FluidTheme.colors.divider,
+                                                            modifier = Modifier.padding(horizontal = FluidSpacing.md)
+                                                        )
+                                                    }
+                                                    TaskRow(
+                                                        task = task,
+                                                        project = projects.find { it.id == task.projectId },
+                                                        onToggleComplete = { onToggleComplete(task.id) },
+                                                        onToggleFlag = { onToggleFlag(task.id) },
+                                                        onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
+                                                        onAssignToday = { onAssignToday(task.id) },
+                                                        onDelete = { onDeleteTask(task.id) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Floating nav bar clearance spacer
+                        Spacer(modifier = Modifier.height(100.dp))
+                    }
+                }
+            }
         }
     }
 }

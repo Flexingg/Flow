@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.Project
+import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.TaskItem
 
 @Entity(tableName = "projects")
@@ -24,6 +25,7 @@ data class TaskEntity(
     val projectId: String?,
     val isFlagged: Boolean,
     val isCompleted: Boolean,
+    val recurrenceRuleRaw: String? = null,
     val createdAt: Long,
     val completedAt: Long?
 )
@@ -51,6 +53,7 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     projectId = projectId,
     isFlagged = isFlagged,
     isCompleted = isCompleted,
+    recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
     createdAt = createdAt,
     completedAt = completedAt
 )
@@ -64,6 +67,7 @@ fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     projectId = projectId,
     isFlagged = isFlagged,
     isCompleted = isCompleted,
+    recurrenceRuleRaw = recurrenceRule?.toStorageString(),
     createdAt = createdAt,
     completedAt = completedAt
 )
