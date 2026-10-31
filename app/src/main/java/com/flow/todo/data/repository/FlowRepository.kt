@@ -6,7 +6,7 @@ import com.flow.todo.data.local.FlowDao
 import com.flow.todo.data.local.toDomain
 import com.flow.todo.data.local.toEntity
 import com.flow.todo.domain.model.AccessibilityPreferences
-import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
 import kotlinx.coroutines.flow.Flow
@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
-import java.time.LocalDate
 
 class FlowRepository(
     private val dao: FlowDao,
@@ -55,6 +54,10 @@ class FlowRepository(
         entities.map { it.toDomain() }
     }
 
+    fun observeGoals(): Flow<List<FlowGoal>> = dao.observeGoals().map { entities ->
+        entities.map { it.toDomain() }
+    }
+
     suspend fun upsertTask(task: TaskItem) {
         dao.upsertTask(task.toEntity())
     }
@@ -77,7 +80,16 @@ class FlowRepository(
 
     suspend fun deleteProject(projectId: String) {
         dao.clearProjectFromTasks(projectId)
+        dao.deleteGoalsForProject(projectId)
         dao.deleteProject(projectId)
+    }
+
+    suspend fun upsertGoal(goal: FlowGoal) {
+        dao.upsertGoal(goal.toEntity())
+    }
+
+    suspend fun deleteGoal(goalId: String) {
+        dao.deleteGoal(goalId)
     }
 
     suspend fun updateAccessibilityPreferences(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {

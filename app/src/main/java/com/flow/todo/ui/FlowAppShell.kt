@@ -47,6 +47,8 @@ import com.flow.todo.ui.components.FluidTopBar
 import com.flow.todo.ui.components.FluidWaveSplashOverlay
 import com.flow.todo.ui.components.rememberSplashTransitionState
 import com.flow.todo.ui.screens.FluidSettingsSheet
+import com.flow.todo.ui.screens.GoalCreatorSheet
+import com.flow.todo.ui.screens.GoalsScreen
 import com.flow.todo.ui.screens.InboxScreen
 import com.flow.todo.ui.screens.ProjectsScreen
 import com.flow.todo.ui.screens.QuickCaptureSheet
@@ -54,6 +56,7 @@ import com.flow.todo.ui.screens.TodayNextScreen
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
+import com.flow.todo.ui.theme.MomentumSpectrum
 import com.flow.todo.ui.theme.fluidProgressiveBlur
 import java.time.LocalDate
 
@@ -63,12 +66,13 @@ import java.time.LocalDate
  * - Per-tab LazyListState tracking for progressive blur / morphing TopBar
  * - Floating Island Navigation Bar with progressive bottom blur ramp
  * - Smooth spring-morph AnimatedContent screen transitions
- * - Integrated Quick Capture & Settings bottom sheets with Health Connect & Shizuku System UI Color Sync
+ * - Integrated Quick Capture, Goal Creator & Settings bottom sheets with Health Connect, App Usage & Shizuku System UI Color Sync
  */
 @Composable
 fun FlowAppShell(
     viewModel: FlowViewModel,
     onRequestHealthPermissions: () -> Unit = {},
+    onRequestUsagePermission: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -85,11 +89,13 @@ fun FlowAppShell(
     val inboxListState = rememberLazyListState()
     val todayListState = rememberLazyListState()
     val projectsListState = rememberLazyListState()
+    val goalsListState = rememberLazyListState()
 
     val currentListState = when (uiState.selectedTab) {
         FlowTab.INBOX -> inboxListState
         FlowTab.TODAY_NEXT -> todayListState
         FlowTab.PROJECTS -> projectsListState
+        FlowTab.GOALS -> goalsListState
     }
 
     // TopBar elevates and morphs when content scrolls beneath it
@@ -121,6 +127,16 @@ fun FlowAppShell(
         FlowTab.PROJECTS -> {
             val projectCount = uiState.projects.size
             "Projects" to "$projectCount active ${if (projectCount == 1) "outcome" else "outcomes"}"
+        }
+        FlowTab.GOALS -> {
+            val met = uiState.completedGoalsCount
+            val total = uiState.totalGoalsCount
+            val stage = MomentumSpectrum.stageLabel(uiState.goalMomentumProgress)
+            "Goal Bar" to if (total > 0) {
+                "$met of $total goals met • $stage"
+            } else {
+                "Set task, health & app limits to drive your colors"
+            }
         }
     }
 
@@ -248,6 +264,7 @@ fun FlowAppShell(
                         completedTodayCount = uiState.completedTodayCount,
                         totalTodayTargetCount = uiState.totalTodayTargetCount,
                         dailyProgress = uiState.dailyProgress,
+                        evaluatedGoals = uiState.evaluatedGoals,
                         healthSnapshot = uiState.healthSnapshot,
                         shizukuStatus = uiState.shizukuStatus,
                         syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
@@ -256,6 +273,8 @@ fun FlowAppShell(
                         onAddQuickHealthGoal = { metric, target ->
                             viewModel.addQuickHealthGoalTask(metric, target, isDailyRecurring = true)
                         },
+                        onOpenGoalsTab = { viewModel.selectTab(FlowTab.GOALS) },
+                        onOpenGoalCreator = { viewModel.setGoalCreatorOpen(true) },
                         onOpenSettings = { viewModel.setSettingsOpen(true) },
                         onToggleComplete = viewModel::toggleTaskCompletion,
                         onToggleFlag = viewModel::toggleTaskFlag,
@@ -284,6 +303,38 @@ fun FlowAppShell(
                         contentPadding = screenContentPadding,
                         listState = projectsListState
                     )
+
+                    FlowTab.GOALS -> GoalsScreen(
+                        evaluatedGoals = uiState.evaluatedGoals,
+                        projects = uiState.projects,
+                        goalMomentumProgress = uiState.goalMomentumProgress,
+                        healthSnapshot = uiState.healthSnapshot,
+                        appUsageSnapshot = uiState.appUsageSnapshot,
+                        shizukuStatus = uiState.shizukuStatus,
+                        syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
+                        onOpenGoalCreator = { viewModel.setGoalCreatorOpen(true) },
+                        onDeleteGoal = viewModel::deleteGoal,
+                        onAddPresetGoal = { title, category, comparison, targetValue, period, projectId, healthMetric, targetPackageName, targetAppName, appUsageMetric ->
+                            viewModel.addGoal(
+                                title = title,
+                                category = category,
+                                comparison = comparison,
+                                targetValue = targetValue,
+                                period = period,
+                                projectId = projectId,
+                                healthMetric = healthMetric,
+                                targetPackageName = targetPackageName,
+                                targetAppName = targetAppName,
+                                appUsageMetric = appUsageMetric
+                            )
+                        },
+                        onRequestHealthPermissions = onRequestHealthPermissions,
+                        onRequestUsagePermission = onRequestUsagePermission,
+                        onRefreshMetrics = viewModel::refreshHealthAndSystemStatus,
+                        onOpenSettings = { viewModel.setSettingsOpen(true) },
+                        contentPadding = screenContentPadding,
+                        listState = goalsListState
+                    )
                 }
             }
 
@@ -296,12 +347,18 @@ fun FlowAppShell(
                     .fluidProgressiveBlur(fromTop = false, height = 115.dp)
             )
 
-            // Floating Island Navigation Bar with Quick-Capture Button
+            // Floating Island Navigation Bar with Quick-Capture / Goal-Creator Button
             FluidIslandNavBar(
                 selectedTab = uiState.selectedTab,
                 inboxBadgeCount = uiState.inboxTasks.count { !it.isCompleted },
                 onTabSelected = viewModel::selectTab,
-                onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
+                onQuickAddClick = {
+                    if (uiState.selectedTab == FlowTab.GOALS) {
+                        viewModel.setGoalCreatorOpen(true)
+                    } else {
+                        viewModel.setQuickCaptureOpen(true)
+                    }
+                },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
@@ -315,7 +372,7 @@ fun FlowAppShell(
             )
         }
 
-        // Living Flow Quick-Capture Sheet
+        // Living Flow Quick-Capture Sheet (GTD Tasks)
         if (uiState.isQuickCaptureOpen) {
             QuickCaptureSheet(
                 projects = uiState.projects,
@@ -330,6 +387,33 @@ fun FlowAppShell(
                         isFlagged = isFlagged,
                         recurrenceRule = recurrenceRule,
                         healthGoal = healthGoal
+                    )
+                }
+            )
+        }
+
+        // Living Flow Dedicated Goal Creator Sheet (Task Milestones, Health Connect, App Usage Limits)
+        if (uiState.isGoalCreatorOpen) {
+            GoalCreatorSheet(
+                projects = uiState.projects,
+                installedApps = uiState.appUsageSnapshot.installedApps,
+                hasUsagePermission = uiState.appUsageSnapshot.hasUsagePermission,
+                hasHealthPermissions = uiState.healthSnapshot.hasAllPermissions,
+                onRequestUsagePermission = onRequestUsagePermission,
+                onRequestHealthPermissions = onRequestHealthPermissions,
+                onDismiss = { viewModel.setGoalCreatorOpen(false) },
+                onSaveGoal = { title, category, comparison, targetValue, period, projectId, healthMetric, targetPackageName, targetAppName, appUsageMetric ->
+                    viewModel.addGoal(
+                        title = title,
+                        category = category,
+                        comparison = comparison,
+                        targetValue = targetValue,
+                        period = period,
+                        projectId = projectId,
+                        healthMetric = healthMetric,
+                        targetPackageName = targetPackageName,
+                        targetAppName = targetAppName,
+                        appUsageMetric = appUsageMetric
                     )
                 }
             )

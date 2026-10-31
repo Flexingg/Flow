@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flow.todo.domain.model.EvaluatedGoal
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthMetricType
@@ -74,6 +75,7 @@ import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidGlowingProgressBar
+import com.flow.todo.ui.components.FluidGoalSpectrumBar
 import com.flow.todo.ui.components.FluidInsetCard
 import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.theme.FluidShapes
@@ -96,12 +98,15 @@ fun TodayNextScreen(
     completedTodayCount: Int,
     totalTodayTargetCount: Int,
     dailyProgress: Float = 0f,
+    evaluatedGoals: List<EvaluatedGoal> = emptyList(),
     healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
     shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
     syncSystemColorsWithShizuku: Boolean = false,
     onRequestHealthPermissions: () -> Unit = {},
     onRefreshHealthStats: () -> Unit = {},
     onAddQuickHealthGoal: (HealthMetricType, Double) -> Unit = { _, _ -> },
+    onOpenGoalsTab: () -> Unit = {},
+    onOpenGoalCreator: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onToggleComplete: (String) -> Unit,
     onToggleFlag: (String) -> Unit,
@@ -116,13 +121,7 @@ fun TodayNextScreen(
     val haptic = LocalHapticFeedback.current
     var selectedMode by remember { mutableIntStateOf(0) } // 0: Today & Next, 1: Next Week Queue
 
-    val effectiveProgress = if (dailyProgress > 0f) {
-        dailyProgress.coerceIn(0f, 1f)
-    } else if (totalTodayTargetCount > 0) {
-        (completedTodayCount.toFloat() / totalTodayTargetCount.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
+    val effectiveProgress = dailyProgress.coerceIn(0f, 1f)
     val progressPercent = (effectiveProgress * 100).toInt()
     val momentumAccentColor = MomentumSpectrum.colorForProgress(effectiveProgress)
 
@@ -533,205 +532,16 @@ fun TodayNextScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(FluidSpacing.lg)
                     ) {
-                        // Section 0: Health Connect & Biometric Goals Card
-                        FluidInsetCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            accentGlowColor = FluidTheme.colors.accent.copy(alpha = 0.25f)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Favorite,
-                                            contentDescription = null,
-                                            tint = FluidTheme.colors.accent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Column {
-                                        Text(
-                                            text = "Health Connect & Goals",
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = FluidTheme.colors.textPrimary
-                                        )
-                                        Text(
-                                            text = "Live biometrics & auto-tracked GTD goals",
-                                            fontSize = 11.sp,
-                                            color = FluidTheme.colors.textTertiary
-                                        )
-                                    }
-                                }
-
-                                // Permission status badge
-                                Box(
-                                    modifier = Modifier
-                                        .clip(FluidShapes.full)
-                                        .background(
-                                            if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success.copy(alpha = 0.12f)
-                                            else FluidTheme.colors.accent.copy(alpha = 0.12f)
-                                        )
-                                        .border(
-                                            1.dp,
-                                            if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success.copy(alpha = 0.28f)
-                                            else FluidTheme.colors.accent.copy(alpha = 0.28f),
-                                            FluidShapes.full
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "${healthSnapshot.grantedPermissionCount}/${healthSnapshot.totalPermissionCount} perms",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success else FluidTheme.colors.accent
-                                    )
-                                }
-                            }
-
-                            // If not all permissions granted, show prominent grant button alongside refresh chip
-                            if (!healthSnapshot.hasAllPermissions) {
-                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    FluidPillButton(
-                                        text = "Grant All Health Connect Permissions",
-                                        onClick = onRequestHealthPermissions,
-                                        isPrimary = true,
-                                        leadingIcon = Icons.Rounded.Favorite,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .fluidGlass(GlassLevel.THIN, FluidShapes.full)
-                                            .fluidInteractive(pressScale = 0.90f, onClick = onRefreshHealthStats),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Refresh,
-                                            contentDescription = "Refresh",
-                                            tint = FluidTheme.colors.textPrimary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(FluidSpacing.sm))
-
-                            // Live Biometric Stat Strip
-                            Text(
-                                text = "TODAY'S LIVE READINGS",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                                color = FluidTheme.colors.textTertiary
-                            )
-                            Spacer(modifier = Modifier.height(FluidSpacing.xs))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                HealthMetricType.entries.forEach { metric ->
-                                    val currentVal = healthSnapshot.valueFor(metric)
-                                    Box(
-                                        modifier = Modifier
-                                            .widthIn(min = 96.dp)
-                                            .fluidGlass(GlassLevel.THIN, FluidShapes.md)
-                                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = metric.label,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = FluidTheme.colors.textSecondary,
-                                                maxLines = 1
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = metric.formatValue(currentVal),
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = FluidTheme.colors.textPrimary
-                                            )
-                                            Text(
-                                                text = metric.unit,
-                                                fontSize = 10.sp,
-                                                color = FluidTheme.colors.textTertiary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(FluidSpacing.md))
-
-                            // 1-Tap Health Goals
-                            Text(
-                                text = "1-TAP HEALTH GOALS",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                                color = FluidTheme.colors.textTertiary
-                            )
-                            Spacer(modifier = Modifier.height(FluidSpacing.xs))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                val quickGoals = listOf(
-                                    HealthMetricType.STEPS to 10000.0,
-                                    HealthMetricType.ACTIVE_CALORIES to 500.0,
-                                    HealthMetricType.EXERCISE_MINUTES to 30.0,
-                                    HealthMetricType.SLEEP_HOURS to 7.5,
-                                    HealthMetricType.HYDRATION_LITERS to 2.5,
-                                    HealthMetricType.DISTANCE_KM to 5.0,
-                                    HealthMetricType.FLOORS_CLIMBED to 10.0
-                                )
-                                quickGoals.forEach { (metric, target) ->
-                                    val label = when (metric) {
-                                        HealthMetricType.STEPS -> "+ 10,000 Steps"
-                                        HealthMetricType.ACTIVE_CALORIES -> "+ 500 kcal"
-                                        HealthMetricType.EXERCISE_MINUTES -> "+ 30 min Exercise"
-                                        HealthMetricType.SLEEP_HOURS -> "+ 7.5 hrs Sleep"
-                                        HealthMetricType.HYDRATION_LITERS -> "+ 2.5 L Water"
-                                        HealthMetricType.DISTANCE_KM -> "+ 5.0 km Distance"
-                                        HealthMetricType.FLOORS_CLIMBED -> "+ 10 Floors"
-                                        else -> "+ ${metric.formatValue(target)} ${metric.unit}"
-                                    }
-                                    FluidFilterChip(
-                                        label = label,
-                                        selected = false,
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onAddQuickHealthGoal(metric, target)
-                                        },
-                                        leadingIcon = Icons.Rounded.DirectionsRun
-                                    )
-                                }
-                            }
-                        }
+                        // Section 0: Dedicated Living Flow Goal Bar
+                        FluidGoalSpectrumBar(
+                            evaluatedGoals = evaluatedGoals,
+                            goalMomentumProgress = effectiveProgress,
+                            shizukuReady = shizukuStatus.isReady,
+                            syncSystemColors = syncSystemColorsWithShizuku,
+                            onOpenGoalsTab = onOpenGoalsTab,
+                            onOpenGoalCreator = onOpenGoalCreator,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         // Section 1: Due Today & Flagged
                         FluidInsetCard(modifier = Modifier.fillMaxWidth()) {

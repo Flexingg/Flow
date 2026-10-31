@@ -7,6 +7,11 @@
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- App Usage Limits & Launch Count Tracking via UsageStatsManager -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- All Health Connect Read Permissions -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
@@ -28,12 +33,16 @@
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
 
-    <!-- Package visibility for Health Connect & Shizuku -->
+    <!-- Package visibility for Health Connect, Shizuku, and Installed Launcher Apps -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
         <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 

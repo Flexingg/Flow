@@ -3,6 +3,7 @@ package com.flow.todo
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.local.FlowDatabase
 import com.flow.todo.data.repository.FlowRepository
 import com.flow.todo.data.system.ShizukuSystemColorManager
+import com.flow.todo.data.usage.AppUsageManager
 import com.flow.todo.ui.FlowAppShell
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidTheme
@@ -33,10 +35,16 @@ class MainActivity : ComponentActivity() {
         val repository = FlowRepository(database.flowDao(), applicationContext)
         val healthConnectManager = HealthConnectManager(applicationContext)
         shizukuManager = ShizukuSystemColorManager(applicationContext)
+        val appUsageManager = AppUsageManager(applicationContext)
 
         viewModel = ViewModelProvider(
             this,
-            FlowViewModel.provideFactory(repository, healthConnectManager, shizukuManager)
+            FlowViewModel.provideFactory(
+                repository = repository,
+                healthConnectManager = healthConnectManager,
+                shizukuManager = shizukuManager,
+                appUsageManager = appUsageManager
+            )
         )[FlowViewModel::class.java]
 
         setContent {
@@ -71,13 +79,31 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val requestUsagePermission: () -> Unit = {
+                viewModel.refreshHealthAndSystemStatus()
+                if (!uiState.appUsageSnapshot.hasUsagePermission) {
+                    runCatching {
+                        val usageIntent = Intent(
+                            Settings.ACTION_USAGE_ACCESS_SETTINGS,
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(usageIntent)
+                    }.onFailure {
+                        runCatching {
+                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        }
+                    }
+                }
+            }
+
             FluidTheme(
                 preferences = uiState.accessibility,
                 dailyProgress = uiState.dailyProgress
             ) {
                 FlowAppShell(
                     viewModel = viewModel,
-                    onRequestHealthPermissions = requestHealthPermissions
+                    onRequestHealthPermissions = requestHealthPermissions,
+                    onRequestUsagePermission = requestUsagePermission
                 )
             }
         }

@@ -36,9 +36,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.TrackChanges
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -240,8 +241,9 @@ fun FluidIslandNavBar(
                                 Box(contentAlignment = Alignment.TopEnd) {
                                     val icon = when (tab) {
                                         FlowTab.INBOX -> Icons.Rounded.Inbox
-                                        FlowTab.TODAY_NEXT -> Icons.Rounded.CalendarToday
+                                        FlowTab.TODAY_NEXT -> Icons.Rounded.WbSunny
                                         FlowTab.PROJECTS -> Icons.Rounded.Folder
+                                        FlowTab.GOALS -> Icons.Rounded.TrackChanges
                                     }
 
                                     Icon(
@@ -283,15 +285,13 @@ fun FluidIslandNavBar(
                                     }
                                 }
 
+                                val label = if (tab == FlowTab.TODAY_NEXT) "Today" else tab.label
                                 Text(
-                                    text = when (tab) {
-                                        FlowTab.INBOX -> "Inbox"
-                                        FlowTab.TODAY_NEXT -> "Today"
-                                        FlowTab.PROJECTS -> "Projects"
-                                    },
+                                    text = label,
                                     color = if (isSelected) colors.accent else colors.textSecondary,
                                     fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
                                     modifier = Modifier.padding(top = 2.dp)
                                 )
                             }

@@ -14,6 +14,9 @@ interface FlowDao {
     @Query("SELECT * FROM projects ORDER BY createdAt ASC")
     fun observeProjects(): Flow<List<ProjectEntity>>
 
+    @Query("SELECT * FROM goals ORDER BY createdAt ASC")
+    fun observeGoals(): Flow<List<GoalEntity>>
+
     @Query("SELECT COUNT(*) FROM projects")
     suspend fun getProjectCount(): Int
 
@@ -37,4 +40,13 @@ interface FlowDao {
 
     @Query("UPDATE tasks SET projectId = NULL WHERE projectId = :projectId")
     suspend fun clearProjectFromTasks(projectId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertGoal(goal: GoalEntity)
+
+    @Query("DELETE FROM goals WHERE id = :goalId")
+    suspend fun deleteGoal(goalId: String)
+
+    @Query("DELETE FROM goals WHERE projectId = :projectId")
+    suspend fun deleteGoalsForProject(projectId: String)
 }

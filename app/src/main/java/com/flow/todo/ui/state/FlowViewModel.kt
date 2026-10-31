@@ -6,8 +6,16 @@ import androidx.lifecycle.viewModelScope
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
 import com.flow.todo.data.system.ShizukuSystemColorManager
+import com.flow.todo.data.usage.AppUsageManager
 import com.flow.todo.domain.model.AccessibilityPreferences
+import com.flow.todo.domain.model.AppUsageMetricType
+import com.flow.todo.domain.model.AppUsageSnapshot
+import com.flow.todo.domain.model.EvaluatedGoal
+import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.FlowTab
+import com.flow.todo.domain.model.GoalCategory
+import com.flow.todo.domain.model.GoalComparison
+import com.flow.todo.domain.model.GoalPeriod
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthGoalSpec
@@ -36,11 +44,23 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.roundToLong
+
+val FlowGoal.isEnabled: Boolean
+    get() = this.id !in FlowViewModel.globalDisabledGoalIds.value
 
 data class FlowUiState(
     val selectedTab: FlowTab = FlowTab.INBOX,
     val allTasks: List<TaskItem> = emptyList(),
     val projects: List<Project> = emptyList(),
+    val goals: List<FlowGoal> = emptyList(),
+    val evaluatedGoals: List<EvaluatedGoal> = emptyList(),
+    val completedGoalsCount: Int = 0,
+    val totalGoalsCount: Int = 0,
+    val goalMomentumProgress: Float = 0f,
+    val appUsageSnapshot: AppUsageSnapshot = AppUsageSnapshot(),
+    val isGoalCreatorOpen: Boolean = false,
+    val disabledGoalIds: Set<String> = emptySet(),
     val inboxTasks: List<TaskItem> = emptyList(),
     val todayTasks: List<TaskItem> = emptyList(),
     val nextActionTasks: List<TaskItem> = emptyList(),
@@ -63,13 +83,23 @@ data class FlowUiState(
 class FlowViewModel(
     private val repository: FlowRepository,
     private val healthConnectManager: HealthConnectManager? = null,
-    private val shizukuManager: ShizukuSystemColorManager? = null
+    private val shizukuManager: ShizukuSystemColorManager? = null,
+    private val appUsageManager: AppUsageManager? = null
 ) : ViewModel() {
 
     private data class LocalUiFlags(
         val selectedTab: FlowTab = FlowTab.INBOX,
         val isQuickCaptureOpen: Boolean = false,
-        val isSettingsOpen: Boolean = false
+        val isSettingsOpen: Boolean = false,
+        val isGoalCreatorOpen: Boolean = false,
+        val disabledGoalIds: Set<String> = emptySet()
+    )
+
+    private data class RepositoryDomainData(
+        val tasks: List<TaskItem>,
+        val projects: List<Project>,
+        val goals: List<FlowGoal>,
+        val appUsage: AppUsageSnapshot
     )
 
     private data class SystemHealthState(
@@ -90,6 +120,23 @@ class FlowViewModel(
     private val lastAppliedHexFlow: Flow<String?> =
         shizukuManager?.lastAppliedHex ?: MutableStateFlow(null)
 
+    private val appUsageSnapshotFlow: Flow<AppUsageSnapshot> =
+        appUsageManager?.snapshot ?: MutableStateFlow(AppUsageSnapshot())
+
+    private val domainDataFlow: Flow<RepositoryDomainData> = combine(
+        repository.observeTasks(),
+        repository.observeProjects(),
+        repository.observeGoals(),
+        appUsageSnapshotFlow
+    ) { tasks, projects, goals, usage ->
+        RepositoryDomainData(
+            tasks = tasks,
+            projects = projects,
+            goals = goals,
+            appUsage = usage
+        )
+    }
+
     private val systemHealthFlow: Flow<SystemHealthState> = combine(
         healthSnapshotFlow,
         shizukuStatusFlow,
@@ -104,14 +151,18 @@ class FlowViewModel(
 
     val uiState: StateFlow<FlowUiState> = combine(
         _localFlags,
-        repository.observeTasks(),
-        repository.observeProjects(),
+        domainDataFlow,
         repository.accessibilityPreferences,
         systemHealthFlow
-    ) { flags, tasks, projects, accessibility, sysHealth ->
+    ) { flags, domainData, accessibility, sysHealth ->
         val today = LocalDate.now()
         val todayEpochDay = today.toEpochDay()
         val nextWeekEndEpochDay = today.plusDays(7).toEpochDay()
+
+        val tasks = domainData.tasks
+        val projects = domainData.projects
+        val goals = domainData.goals
+        val usage = domainData.appUsage
 
         val inboxTasks = tasks.filter { it.bucket == GtdBucket.INBOX }
 
@@ -141,7 +192,6 @@ class FlowViewModel(
             }
             val dateSubtitle = targetDate.format(dateFormatter)
 
-            // Match tasks explicitly due on targetEpoch OR recurring tasks whose rule occurs on targetDate
             val dayTasks = activeTasks.filter { task ->
                 val isExplicitlyDue = task.dueDateEpochDay == targetEpoch
                 val isRecurringMatch = task.recurrenceRule?.isRecurring == true &&
@@ -149,7 +199,6 @@ class FlowViewModel(
                 isExplicitlyDue || isRecurringMatch
             }.map { task ->
                 if (task.dueDateEpochDay != targetEpoch && task.recurrenceRule?.isRecurring == true) {
-                    // Projected occurrence for this day in the queue
                     task.copy(dueDateEpochDay = targetEpoch)
                 } else {
                     task
@@ -185,7 +234,30 @@ class FlowViewModel(
         val completedTodayCount = todayTasks.count { it.isCompleted }
         val totalTodayTargetCount = todayTasks.size
 
-        val dailyProgress = if (todayTasks.isEmpty()) {
+        // Evaluate first-class Flow goals
+        val projectsMap = projects.associateBy { it.id }
+        val evaluatedGoals = goals.map { goal ->
+            evaluateGoal(
+                goal = goal,
+                allTasks = tasks,
+                projectsMap = projectsMap,
+                healthSnapshot = sysHealth.healthSnapshot,
+                appUsageSnapshot = usage,
+                todayEpochDay = todayEpochDay
+            )
+        }
+
+        val activeGoals = evaluatedGoals.filter { it.goal.id !in flags.disabledGoalIds }
+        val goalMomentumProgress = if (activeGoals.isEmpty()) {
+            0f
+        } else {
+            (activeGoals.sumOf { it.momentumContribution.toDouble() }.toFloat() / activeGoals.size.toFloat()).coerceIn(0f, 1f)
+        }
+        val completedGoalsCount = activeGoals.count { it.isCompleted }
+        val totalGoalsCount = activeGoals.size
+
+        // Fallback task progress for when no goals are configured yet
+        val fallbackTaskProgress = if (todayTasks.isEmpty()) {
             0f
         } else {
             val totalScore = todayTasks.sumOf { task ->
@@ -201,10 +273,27 @@ class FlowViewModel(
             (totalScore / todayTasks.size.toDouble()).toFloat().coerceIn(0f, 1f)
         }
 
+        // CRITICAL REQUIREMENT: Set dailyProgress = goalMomentumProgress so that all color codes
+        // (Red -> Purple -> Blue -> Yellow -> Green) in FluidTheme and Shizuku System UI come from
+        // Goals being completed or progress towards Goals!
+        val effectiveDailyProgress = if (activeGoals.isNotEmpty()) {
+            goalMomentumProgress
+        } else {
+            fallbackTaskProgress
+        }
+
         FlowUiState(
             selectedTab = flags.selectedTab,
             allTasks = tasks,
             projects = projects,
+            goals = goals,
+            evaluatedGoals = evaluatedGoals,
+            completedGoalsCount = completedGoalsCount,
+            totalGoalsCount = totalGoalsCount,
+            goalMomentumProgress = goalMomentumProgress,
+            appUsageSnapshot = usage,
+            isGoalCreatorOpen = flags.isGoalCreatorOpen,
+            disabledGoalIds = flags.disabledGoalIds,
             inboxTasks = inboxTasks,
             todayTasks = todayTasks,
             nextActionTasks = nextActionTasks,
@@ -218,7 +307,7 @@ class FlowViewModel(
             isQuickCaptureOpen = flags.isQuickCaptureOpen,
             isSettingsOpen = flags.isSettingsOpen,
             accessibility = accessibility,
-            dailyProgress = dailyProgress,
+            dailyProgress = effectiveDailyProgress,
             healthSnapshot = sysHealth.healthSnapshot,
             shizukuStatus = sysHealth.shizukuStatus,
             lastSyncedSystemColorHex = sysHealth.lastAppliedHex
@@ -263,6 +352,135 @@ class FlowViewModel(
         }
     }
 
+    private fun evaluateGoal(
+        goal: FlowGoal,
+        allTasks: List<TaskItem>,
+        projectsMap: Map<String, Project>,
+        healthSnapshot: HealthDailySnapshot,
+        appUsageSnapshot: AppUsageSnapshot,
+        todayEpochDay: Long
+    ): EvaluatedGoal {
+        val startOfTodayMillis = LocalDate.ofEpochDay(todayEpochDay)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        val startOfWeekMillis = LocalDate.ofEpochDay(todayEpochDay)
+            .minusDays(6)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+
+        val currentValue: Double
+        val unitLabel: String
+        val subtitle: String
+
+        when (goal.category) {
+            GoalCategory.TASK_COMPLETION -> {
+                val matchingCompletedTasks = allTasks.filter { task ->
+                    task.isCompleted &&
+                        (goal.projectId == null || task.projectId == goal.projectId) &&
+                        when (goal.period) {
+                            GoalPeriod.DAILY -> {
+                                (task.completedAt != null && task.completedAt >= startOfTodayMillis) ||
+                                    (task.completedAt == null && task.dueDateEpochDay == todayEpochDay)
+                            }
+                            GoalPeriod.WEEKLY -> {
+                                (task.completedAt != null && task.completedAt >= startOfWeekMillis) ||
+                                    (task.completedAt == null && task.dueDateEpochDay != null &&
+                                        task.dueDateEpochDay in (todayEpochDay - 6)..todayEpochDay)
+                            }
+                        }
+                }
+                currentValue = matchingCompletedTasks.size.toDouble()
+                unitLabel = "tasks"
+                val scopeName = goal.projectId?.let { projectsMap[it]?.name } ?: "All Tasks"
+                subtitle = "${goal.period.label} • $scopeName"
+            }
+            GoalCategory.HEALTH_CONNECT -> {
+                val metric = goal.healthMetric ?: HealthMetricType.STEPS
+                currentValue = healthSnapshot.valueFor(metric)
+                unitLabel = metric.unit
+                subtitle = "Health Connect • ${metric.label}"
+            }
+            GoalCategory.APP_USAGE -> {
+                val usageMetric = goal.appUsageMetric ?: AppUsageMetricType.ACTIVE_MINUTES
+                val stat = goal.targetPackageName?.let { appUsageSnapshot.statFor(it) }
+                currentValue = when (usageMetric) {
+                    AppUsageMetricType.ACTIVE_MINUTES -> stat?.activeMinutesToday ?: 0.0
+                    AppUsageMetricType.LAUNCH_COUNT -> (stat?.launchCountToday ?: 0).toDouble()
+                }
+                unitLabel = usageMetric.unit
+                val appName = goal.targetAppName?.takeIf { it.isNotBlank() }
+                    ?: stat?.appName
+                    ?: goal.targetPackageName
+                    ?: "App"
+                subtitle = "App Usage • $appName"
+            }
+        }
+
+        val isCompleted: Boolean
+        val isOverLimit: Boolean
+        val barFillFraction: Float
+        val momentumContribution: Float
+
+        when (goal.comparison) {
+            GoalComparison.AT_LEAST -> {
+                val target = goal.targetValue.coerceAtLeast(0.0001)
+                val ratio = (currentValue / target).toFloat().coerceIn(0f, 1f)
+                isCompleted = currentValue >= goal.targetValue
+                isOverLimit = false
+                barFillFraction = ratio
+                momentumContribution = ratio
+            }
+            GoalComparison.AT_MOST -> {
+                if (goal.targetValue <= 0.0) {
+                    isCompleted = currentValue <= 0.0
+                    isOverLimit = currentValue > 0.0
+                    barFillFraction = if (isOverLimit) 1f else 0f
+                    momentumContribution = if (isCompleted) 1f else 0f
+                } else {
+                    val usageRatio = (currentValue / goal.targetValue).toFloat()
+                    isCompleted = currentValue <= goal.targetValue
+                    isOverLimit = currentValue > goal.targetValue
+                    barFillFraction = usageRatio.coerceIn(0f, 1f)
+                    // For AT_MOST goals, staying under the limit contributes positively to Goal Momentum
+                    momentumContribution = if (currentValue <= goal.targetValue) {
+                        (1f - (usageRatio * 0.25f)).coerceIn(0.75f, 1f)
+                    } else {
+                        (1f - (usageRatio - 1f)).coerceIn(0f, 0.35f)
+                    }
+                }
+            }
+        }
+
+        val currentStr = formatGoalValue(currentValue, goal, unitLabel)
+        val targetStr = formatGoalValue(goal.targetValue, goal, unitLabel)
+        val statusText = "$currentStr / ${goal.comparison.symbol} $targetStr $unitLabel"
+
+        return EvaluatedGoal(
+            goal = goal,
+            currentValue = currentValue,
+            targetValue = goal.targetValue,
+            isCompleted = isCompleted,
+            momentumContribution = momentumContribution,
+            barFillFraction = barFillFraction,
+            formattedProgressText = statusText,
+            subtitleBadgeText = subtitle,
+            isOverLimit = isOverLimit
+        )
+    }
+
+    private fun formatGoalValue(value: Double, goal: FlowGoal, unitLabel: String): String {
+        return when {
+            goal.category == GoalCategory.HEALTH_CONNECT && goal.healthMetric != null ->
+                goal.healthMetric.formatValue(value)
+            unitLabel == "min" && value < 10.0 && value % 1.0 != 0.0 ->
+                String.format(Locale.US, "%.1f", value)
+            else ->
+                String.format(Locale.US, "%,d", value.roundToLong())
+        }
+    }
+
     fun selectTab(tab: FlowTab) {
         _localFlags.update { it.copy(selectedTab = tab) }
     }
@@ -273,6 +491,60 @@ class FlowViewModel(
 
     fun setSettingsOpen(open: Boolean) {
         _localFlags.update { it.copy(isSettingsOpen = open) }
+    }
+
+    fun setGoalCreatorOpen(open: Boolean) {
+        _localFlags.update { it.copy(isGoalCreatorOpen = open) }
+    }
+
+    fun addGoal(
+        title: String,
+        category: GoalCategory,
+        comparison: GoalComparison,
+        targetValue: Double,
+        period: GoalPeriod = GoalPeriod.DAILY,
+        projectId: String? = null,
+        healthMetric: HealthMetricType? = null,
+        targetPackageName: String? = null,
+        targetAppName: String? = null,
+        appUsageMetric: AppUsageMetricType? = null
+    ) {
+        if (title.isBlank()) return
+        val newGoal = FlowGoal(
+            id = UUID.randomUUID().toString(),
+            title = title.trim(),
+            category = category,
+            comparison = comparison,
+            period = period,
+            targetValue = targetValue,
+            projectId = projectId,
+            healthMetric = healthMetric,
+            targetPackageName = targetPackageName,
+            targetAppName = targetAppName,
+            appUsageMetric = appUsageMetric,
+            createdAt = System.currentTimeMillis()
+        )
+        viewModelScope.launch {
+            repository.upsertGoal(newGoal)
+        }
+    }
+
+    fun toggleGoalEnabled(goalId: String) {
+        _localFlags.update { flags ->
+            val newDisabled = if (goalId in flags.disabledGoalIds) {
+                flags.disabledGoalIds - goalId
+            } else {
+                flags.disabledGoalIds + goalId
+            }
+            globalDisabledGoalIds.value = newDisabled
+            flags.copy(disabledGoalIds = newDisabled)
+        }
+    }
+
+    fun deleteGoal(goalId: String) {
+        viewModelScope.launch {
+            repository.deleteGoal(goalId)
+        }
     }
 
     fun addTask(
@@ -336,6 +608,15 @@ class FlowViewModel(
             healthGoal = goal
         )
 
+        addGoal(
+            title = title,
+            category = GoalCategory.HEALTH_CONNECT,
+            comparison = GoalComparison.AT_LEAST,
+            period = GoalPeriod.DAILY,
+            targetValue = targetValue,
+            healthMetric = metricType
+        )
+
         viewModelScope.launch {
             healthConnectManager?.refreshDailySnapshot()
         }
@@ -345,6 +626,7 @@ class FlowViewModel(
         viewModelScope.launch {
             shizukuManager?.refreshStatus()
             healthConnectManager?.refreshDailySnapshot()
+            appUsageManager?.refreshUsageSnapshot()
             if (uiState.value.accessibility.syncSystemColorsWithShizuku) {
                 shizukuManager?.applyMomentumColorForProgress(uiState.value.dailyProgress)
             }
@@ -377,10 +659,9 @@ class FlowViewModel(
 
         viewModelScope.launch {
             if (nowCompleted && rule != null && rule.isRecurring) {
-                // Complete current occurrence and spawn the next recurring occurrence automatically
                 val completedOccurrence = task.copy(
                     isCompleted = true,
-                    recurrenceRule = null, // Archive completed single instance without duplicating future projections
+                    recurrenceRule = null,
                     completedAt = nowMillis
                 )
                 val anchorDay = task.dueDateEpochDay ?: LocalDate.now().toEpochDay()
@@ -520,16 +801,19 @@ class FlowViewModel(
     }
 
     companion object {
+        internal val globalDisabledGoalIds = MutableStateFlow<Set<String>>(emptySet())
+
         fun provideFactory(
             repository: FlowRepository,
             healthConnectManager: HealthConnectManager? = null,
-            shizukuManager: ShizukuSystemColorManager? = null
+            shizukuManager: ShizukuSystemColorManager? = null,
+            appUsageManager: AppUsageManager? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(FlowViewModel::class.java)) {
-                        return FlowViewModel(repository, healthConnectManager, shizukuManager) as T
+                        return FlowViewModel(repository, healthConnectManager, shizukuManager, appUsageManager) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
                 }

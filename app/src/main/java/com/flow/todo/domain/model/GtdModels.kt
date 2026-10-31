@@ -16,8 +16,9 @@ enum class GtdBucket(val label: String, val description: String) {
 
 enum class FlowTab(val label: String) {
     INBOX("Inbox"),
-    TODAY_NEXT("Today & Queue"),
-    PROJECTS("Projects")
+    TODAY_NEXT("Today"),
+    PROJECTS("Projects"),
+    GOALS("Goals")
 }
 
 enum class RecurrenceType(val label: String) {
@@ -86,7 +87,6 @@ data class RecurrenceRule(
                 nextMonth.atDay(clampedDay).toEpochDay()
             }
             RecurrenceType.MONTHLY_NTH_WEEKDAY -> {
-                // First check if this month's Nth weekday is still strictly in the future relative to baseDate
                 val thisMonthDate = resolveNthWeekday(YearMonth.from(baseDate), nthWeekday, dayOfWeek)
                 if (thisMonthDate.isAfter(baseDate) && safeInterval == 1) {
                     thisMonthDate.toEpochDay()
@@ -290,9 +290,94 @@ data class HealthDailySnapshot(
     fun valueFor(type: HealthMetricType): Double = metrics[type] ?: 0.0
 }
 
+/**
+ * First-Class Goal System (separate from GTD Tasks):
+ * Supports 3 distinct goal sources:
+ * 1. TASK_COMPLETION: X tasks completed in a Day or Week (in general or from a specific Project)
+ * 2. HEALTH_CONNECT: Biometric goal (Steps, Calories, Sleep, Exercise, Water, Distance, etc.) >= or <= X
+ * 3. APP_USAGE: App screen-time (active minutes) or launch count (times opened) <= or >= X in a Day
+ */
+enum class GoalCategory(val label: String, val subtitle: String) {
+    TASK_COMPLETION("Task Milestone", "Tasks completed in a day or week (general or project)"),
+    HEALTH_CONNECT("Health Connect", "Live biometric stats from Android Health Connect"),
+    APP_USAGE("App Usage Limit", "Daily active screen time or times opened for an app")
+}
+
+enum class GoalComparison(val label: String, val shortLabel: String, val symbol: String) {
+    AT_LEAST("At Least (More than / ≥)", "More than", "≥"),
+    AT_MOST("At Most (Less than / ≤)", "Less than", "≤")
+}
+
+enum class GoalPeriod(val label: String) {
+    DAILY("Daily"),
+    WEEKLY("Weekly")
+}
+
+enum class AppUsageMetricType(
+    val label: String,
+    val unit: String,
+    val defaultLimit: Double,
+    val presetValues: List<Double>
+) {
+    ACTIVE_MINUTES("Active Screen Time", "min", 30.0, listOf(10.0, 15.0, 30.0, 45.0, 60.0, 90.0)),
+    LAUNCH_COUNT("Times Opened", "opens", 5.0, listOf(2.0, 3.0, 5.0, 8.0, 10.0, 15.0));
+
+    fun formatValue(value: Double): String {
+        return String.format(Locale.US, "%,d", value.toLong())
+    }
+}
+
+data class InstalledAppInfo(
+    val packageName: String,
+    val appName: String
+)
+
+data class AppUsageStat(
+    val packageName: String,
+    val appName: String,
+    val activeMinutesToday: Double = 0.0,
+    val launchCountToday: Int = 0
+)
+
+data class AppUsageSnapshot(
+    val hasUsagePermission: Boolean = false,
+    val statsByPackage: Map<String, AppUsageStat> = emptyMap(),
+    val installedApps: List<InstalledAppInfo> = emptyList(),
+    val lastSyncedMillis: Long = 0L
+) {
+    fun statFor(packageName: String): AppUsageStat? = statsByPackage[packageName]
+}
+
+data class FlowGoal(
+    val id: String,
+    val title: String,
+    val category: GoalCategory,
+    val comparison: GoalComparison = GoalComparison.AT_LEAST,
+    val period: GoalPeriod = GoalPeriod.DAILY,
+    val targetValue: Double,
+    val projectId: String? = null, // For TASK_COMPLETION: null = any task, non-null = specific project
+    val healthMetric: HealthMetricType? = null, // For HEALTH_CONNECT
+    val targetPackageName: String? = null, // For APP_USAGE
+    val targetAppName: String? = null, // For APP_USAGE
+    val appUsageMetric: AppUsageMetricType? = null, // For APP_USAGE
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class EvaluatedGoal(
+    val goal: FlowGoal,
+    val currentValue: Double,
+    val targetValue: Double,
+    val isCompleted: Boolean,
+    val momentumContribution: Float, // 0f..1f contribution to the Red->Purple->Blue->Yellow->Green color code
+    val barFillFraction: Float, // 0f..1f visual fill for the Goal Bar
+    val formattedProgressText: String, // e.g. "6,420 / ≥ 10,000 steps" or "12 / ≤ 30 min active"
+    val subtitleBadgeText: String, // e.g. "Daily • Health Connect" or "Weekly • Project: Work"
+    val isOverLimit: Boolean = false // true when AT_MOST goal is exceeded
+)
+
 enum class ShizukuStatus(val label: String, val description: String) {
     READY_SECURE_SETTINGS("Active (Direct)", "WRITE_SECURE_SETTINGS granted • Instant System UI morphing"),
-    READY_SHIZUKU("Active (Shizuku)", "Shizuku authorized • System UI colors morph with daily progress"),
+    READY_SHIZUKU("Active (Shizuku)", "Shizuku authorized • System UI colors morph with goal progress"),
     PERMISSION_REQUIRED("Permission Needed", "Tap to authorize Flow in Shizuku"),
     NOT_RUNNING("Shizuku Not Running", "Open & start Shizuku to sync Android System UI colors"),
     NOT_INSTALLED("Shizuku Not Installed", "Install Shizuku to unlock OS-wide Material You color morphing");
@@ -340,6 +425,6 @@ data class AccessibilityPreferences(
     val increasedContrast: Boolean = false,
     val darkThemeOverride: Boolean? = null, // null = follow system, true = dark, false = light
     val useDynamicColor: Boolean = true,
-    val useMomentumColorSpectrum: Boolean = true, // Red -> Purple -> Blue -> Yellow -> Green based on daily progress
+    val useMomentumColorSpectrum: Boolean = true, // Red -> Purple -> Blue -> Yellow -> Green based on goals
     val syncSystemColorsWithShizuku: Boolean = false // Sync Android System UI Material You seed color via Shizuku
 )
