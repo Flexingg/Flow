@@ -70,7 +70,7 @@ class AppUsageManager(private val context: Context) {
                     arrayOf("sh", "-c", "appops set ${context.packageName} GET_USAGE_STATS allow"),
                     null,
                     null
-                ) as Process
+                ) as java.lang.Process
                 process.waitFor()
             }
         }
