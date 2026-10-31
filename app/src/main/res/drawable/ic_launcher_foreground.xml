@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. Soft Drop Shadow (+1.5 Y Offset) -->
+    <group android:translateY="1.5">
+        <path
+            android:pathData="M 31.5,52.5 C 35.5,53.5 40.5,61.5 46.0,66.5 C 52.0,72.0 64.5,50.0 77.0,33.5 C 79.5,30.5 83.5,33.5 81.0,37.0 C 69.0,53.5 56.5,75.5 48.0,75.5 C 41.5,75.5 34.0,67.0 28.0,59.5 C 25.5,56.0 27.5,52.0 31.5,52.5 Z"
+            android:fillColor="#3300184D" />
+    </group>
+
+    <!-- 2. Main Frosted Liquid-Glass Wave Checkmark Ribbon -->
+    <path
+        android:pathData="M 31.5,52.5 C 35.5,53.5 40.5,61.5 46.0,66.5 C 52.0,72.0 64.5,50.0 77.0,33.5 C 79.5,30.5 83.5,33.5 81.0,37.0 C 69.0,53.5 56.5,75.5 48.0,75.5 C 41.5,75.5 34.0,67.0 28.0,59.5 C 25.5,56.0 27.5,52.0 31.5,52.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="31"
+                android:startY="33"
+                android:endX="78"
+                android:endY="75">
+                <item android:offset="0.0" android:color="#E6FFFFFF" />
+                <item android:offset="1.0" android:color="#99B8F5FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. Inner Liquid Twist Highlight along Upper Ridge -->
+    <path
+        android:pathData="M 31.5,53.0 C 35.5,54.2 41.0,62.5 46.0,67.0 C 51.5,71.5 64.0,51.0 76.5,34.2 C 74.5,36.8 63.0,53.5 46.5,70.0 C 42.0,67.0 36.5,58.0 31.5,53.0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="31"
+                android:startY="53"
+                android:endX="76"
+                android:endY="34">
+                <item android:offset="0.0" android:color="#80FFFFFF" />
+                <item android:offset="1.0" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. Crisp 1.2 Contour Glow along Outer Checkmark Silhouette -->
+    <path
+        android:pathData="M 31.5,52.5 C 35.5,53.5 40.5,61.5 46.0,66.5 C 52.0,72.0 64.5,50.0 77.0,33.5 C 79.5,30.5 83.5,33.5 81.0,37.0 C 69.0,53.5 56.5,75.5 48.0,75.5 C 41.5,75.5 34.0,67.0 28.0,59.5 C 25.5,56.0 27.5,52.0 31.5,52.5 Z"
+        android:strokeWidth="1.2">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="31"
+                android:startY="33"
+                android:endX="78"
+                android:endY="75">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#6600F0FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>

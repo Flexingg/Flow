@@ -28,18 +28,24 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.ui.components.FluidIslandNavBar
 import com.flow.todo.ui.components.FluidTopBar
+import com.flow.todo.ui.components.FluidWaveSplashOverlay
+import com.flow.todo.ui.components.rememberSplashTransitionState
 import com.flow.todo.ui.screens.FluidSettingsSheet
 import com.flow.todo.ui.screens.InboxScreen
 import com.flow.todo.ui.screens.ProjectsScreen
@@ -67,6 +73,12 @@ fun FlowAppShell(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isReducedMotion = FluidTheme.isReducedMotion
     val colors = FluidTheme.colors
+
+    var isSplashFinished by rememberSaveable { mutableStateOf(false) }
+    val splashTransition = rememberSplashTransitionState(
+        isAlreadyFinished = isSplashFinished,
+        onSplashFinished = { isSplashFinished = true }
+    )
 
     // Separate scroll states per tab so scroll positions are retained during tab navigation
     val inboxListState = rememberLazyListState()
@@ -162,118 +174,135 @@ fun FlowAppShell(
                 )
             }
     ) {
-        // Main Screen Content with Living Flow Spring-Morph Transitions
-        AnimatedContent(
-            targetState = uiState.selectedTab,
-            transitionSpec = {
-                if (isReducedMotion) {
-                    fadeIn(animationSpec = tween(durationMillis = 150)) togetherWith
-                            fadeOut(animationSpec = tween(durationMillis = 150))
-                } else {
-                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                    (slideInHorizontally(
-                        animationSpec = FluidSprings.morph(false)
-                    ) { (it * 0.18f).toInt() * direction } + fadeIn(
-                        animationSpec = tween(durationMillis = 220)
-                    ) + scaleIn(
-                        initialScale = 0.92f,
-                        animationSpec = FluidSprings.morph(false)
-                    )).togetherWith(
-                        slideOutHorizontally(
-                            animationSpec = FluidSprings.morph(false)
-                        ) { (-it * 0.18f).toInt() * direction } + fadeOut(
-                            animationSpec = tween(durationMillis = 180)
-                        ) + scaleOut(
-                            targetScale = 0.92f,
-                            animationSpec = FluidSprings.morph(false)
-                        )
-                    )
-                }
-            },
-            label = "livingFlowTabTransition",
-            modifier = Modifier.fillMaxSize()
-        ) { tab ->
-            when (tab) {
-                FlowTab.INBOX -> InboxScreen(
-                    tasks = uiState.inboxTasks,
-                    projects = uiState.projects,
-                    onToggleComplete = viewModel::toggleTaskCompletion,
-                    onToggleFlag = viewModel::toggleTaskFlag,
-                    onMoveBucket = viewModel::updateTaskBucket,
-                    onAssignToday = { taskId ->
-                        viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                    },
-                    onDeleteTask = viewModel::deleteTask,
-                    onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
-                    contentPadding = screenContentPadding,
-                    listState = inboxListState
-                )
-
-                FlowTab.TODAY_NEXT -> TodayNextScreen(
-                    todayTasks = uiState.todayTasks,
-                    nextActionTasks = uiState.nextActionTasks,
-                    upcomingWeekDays = uiState.upcomingWeekDays,
-                    laterScheduledTasks = uiState.laterScheduledTasks,
-                    upcomingWeekTotalCount = uiState.upcomingWeekTotalCount,
-                    projects = uiState.projects,
-                    completedTodayCount = uiState.completedTodayCount,
-                    totalTodayTargetCount = uiState.totalTodayTargetCount,
-                    onToggleComplete = viewModel::toggleTaskCompletion,
-                    onToggleFlag = viewModel::toggleTaskFlag,
-                    onMoveBucket = viewModel::updateTaskBucket,
-                    onAssignToday = { taskId ->
-                        viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                    },
-                    onDeleteTask = viewModel::deleteTask,
-                    contentPadding = screenContentPadding,
-                    listState = todayListState
-                )
-
-                FlowTab.PROJECTS -> ProjectsScreen(
-                    projectsWithStats = uiState.projectsWithStats,
-                    somedayTasks = uiState.somedayTasks,
-                    allProjects = uiState.projects,
-                    onToggleComplete = viewModel::toggleTaskCompletion,
-                    onToggleFlag = viewModel::toggleTaskFlag,
-                    onMoveBucket = viewModel::updateTaskBucket,
-                    onAssignToday = { taskId ->
-                        viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                    },
-                    onDeleteTask = viewModel::deleteTask,
-                    onAddProject = viewModel::addProject,
-                    onDeleteProject = viewModel::deleteProject,
-                    contentPadding = screenContentPadding,
-                    listState = projectsListState
-                )
-            }
-        }
-
-        // Bottom Progressive Scrim Ramp for Floating Island Bar
+        // Main Screen Interface (Content + TopBar + IslandNavBar)
+        // Springs into place as splash icon melts and morphs into top ambient glow
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(115.dp)
-                .fluidProgressiveBlur(fromTop = false, height = 115.dp)
-        )
+                .fillMaxSize()
+                .graphicsLayer {
+                    val scale = if (splashTransition.isFinished) 1.0f else splashTransition.homeContentScale
+                    val offsetY = if (splashTransition.isFinished) 0f else splashTransition.homeContentOffsetY.toPx()
+                    val alphaVal = if (splashTransition.isFinished) 1.0f else splashTransition.homeContentAlpha
 
-        // Floating Island Navigation Bar with Quick-Capture Button
-        FluidIslandNavBar(
-            selectedTab = uiState.selectedTab,
-            inboxBadgeCount = uiState.inboxTasks.count { !it.isCompleted },
-            onTabSelected = viewModel::selectTab,
-            onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+                    scaleX = scale
+                    scaleY = scale
+                    translationY = offsetY
+                    alpha = alphaVal
+                }
+        ) {
+            // Main Screen Content with Living Flow Spring-Morph Transitions
+            AnimatedContent(
+                targetState = uiState.selectedTab,
+                transitionSpec = {
+                    if (isReducedMotion) {
+                        fadeIn(animationSpec = tween(durationMillis = 150)) togetherWith
+                                fadeOut(animationSpec = tween(durationMillis = 150))
+                    } else {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (slideInHorizontally(
+                            animationSpec = FluidSprings.morph(false)
+                        ) { (it * 0.18f).toInt() * direction } + fadeIn(
+                            animationSpec = tween(durationMillis = 220)
+                        ) + scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = FluidSprings.morph(false)
+                        )).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = FluidSprings.morph(false)
+                            ) { (-it * 0.18f).toInt() * direction } + fadeOut(
+                                animationSpec = tween(durationMillis = 180)
+                            ) + scaleOut(
+                                targetScale = 0.92f,
+                                animationSpec = FluidSprings.morph(false)
+                            )
+                        )
+                    }
+                },
+                label = "livingFlowTabTransition",
+                modifier = Modifier.fillMaxSize()
+            ) { tab ->
+                when (tab) {
+                    FlowTab.INBOX -> InboxScreen(
+                        tasks = uiState.inboxTasks,
+                        projects = uiState.projects,
+                        onToggleComplete = viewModel::toggleTaskCompletion,
+                        onToggleFlag = viewModel::toggleTaskFlag,
+                        onMoveBucket = viewModel::updateTaskBucket,
+                        onAssignToday = { taskId ->
+                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
+                        },
+                        onDeleteTask = viewModel::deleteTask,
+                        onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
+                        contentPadding = screenContentPadding,
+                        listState = inboxListState
+                    )
 
-        // Morphing Glass Top Bar
-        FluidTopBar(
-            title = currentTitle,
-            subtitle = currentSubtitle,
-            isScrolled = isScrolled,
-            onSettingsClick = { viewModel.setSettingsOpen(true) },
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+                    FlowTab.TODAY_NEXT -> TodayNextScreen(
+                        todayTasks = uiState.todayTasks,
+                        nextActionTasks = uiState.nextActionTasks,
+                        upcomingWeekDays = uiState.upcomingWeekDays,
+                        laterScheduledTasks = uiState.laterScheduledTasks,
+                        upcomingWeekTotalCount = uiState.upcomingWeekTotalCount,
+                        projects = uiState.projects,
+                        completedTodayCount = uiState.completedTodayCount,
+                        totalTodayTargetCount = uiState.totalTodayTargetCount,
+                        onToggleComplete = viewModel::toggleTaskCompletion,
+                        onToggleFlag = viewModel::toggleTaskFlag,
+                        onMoveBucket = viewModel::updateTaskBucket,
+                        onAssignToday = { taskId ->
+                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
+                        },
+                        onDeleteTask = viewModel::deleteTask,
+                        contentPadding = screenContentPadding,
+                        listState = todayListState
+                    )
+
+                    FlowTab.PROJECTS -> ProjectsScreen(
+                        projectsWithStats = uiState.projectsWithStats,
+                        somedayTasks = uiState.somedayTasks,
+                        allProjects = uiState.projects,
+                        onToggleComplete = viewModel::toggleTaskCompletion,
+                        onToggleFlag = viewModel::toggleTaskFlag,
+                        onMoveBucket = viewModel::updateTaskBucket,
+                        onAssignToday = { taskId ->
+                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
+                        },
+                        onDeleteTask = viewModel::deleteTask,
+                        onAddProject = viewModel::addProject,
+                        onDeleteProject = viewModel::deleteProject,
+                        contentPadding = screenContentPadding,
+                        listState = projectsListState
+                    )
+                }
+            }
+
+            // Bottom Progressive Scrim Ramp for Floating Island Bar
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(115.dp)
+                    .fluidProgressiveBlur(fromTop = false, height = 115.dp)
+            )
+
+            // Floating Island Navigation Bar with Quick-Capture Button
+            FluidIslandNavBar(
+                selectedTab = uiState.selectedTab,
+                inboxBadgeCount = uiState.inboxTasks.count { !it.isCompleted },
+                onTabSelected = viewModel::selectTab,
+                onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // Morphing Glass Top Bar
+            FluidTopBar(
+                title = currentTitle,
+                subtitle = currentSubtitle,
+                isScrolled = isScrolled,
+                onSettingsClick = { viewModel.setSettingsOpen(true) },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
 
         // Living Flow Quick-Capture Sheet
         if (uiState.isQuickCaptureOpen) {
@@ -300,6 +329,15 @@ fun FlowAppShell(
                 preferences = uiState.accessibility,
                 onUpdatePreferences = viewModel::updateAccessibility,
                 onDismiss = { viewModel.setSettingsOpen(false) }
+            )
+        }
+
+        // Luminous Wave Check Splash-to-Home Living Flow Overlay
+        if (!splashTransition.isFinished) {
+            FluidWaveSplashOverlay(
+                transitionState = splashTransition,
+                onSplashFinished = { isSplashFinished = true },
+                modifier = Modifier.fillMaxSize()
             )
         }
     }
