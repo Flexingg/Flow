@@ -108,8 +108,7 @@ fun FluidInsetCard(
                 shape = FluidShapes.lg,
                 spotColor = accentGlowColor.copy(alpha = 0.25f)
             )
-            .clip(FluidShapes.lg)
-            .background(if (isDark) colors.surfaceRaised else colors.surfaceSolid)
+            .background(if (isDark) colors.surfaceRaised else colors.surfaceSolid, FluidShapes.lg)
             .border(
                 1.dp,
                 Brush.verticalGradient(
@@ -120,6 +119,7 @@ fun FluidInsetCard(
                 ),
                 FluidShapes.lg
             )
+            .clip(FluidShapes.lg)
     } else if (isDark) {
         Modifier
             .shadow(
@@ -127,8 +127,7 @@ fun FluidInsetCard(
                 shape = FluidShapes.lg,
                 spotColor = Color(0x66000000)
             )
-            .clip(FluidShapes.lg)
-            .background(colors.surfaceRaised)
+            .background(colors.surfaceRaised, FluidShapes.lg)
             .border(
                 1.dp,
                 Brush.verticalGradient(
@@ -139,6 +138,7 @@ fun FluidInsetCard(
                 ),
                 FluidShapes.lg
             )
+            .clip(FluidShapes.lg)
     } else {
         Modifier
             .shadow(
@@ -147,15 +147,15 @@ fun FluidInsetCard(
                 ambientColor = Color(0x0A000000),
                 spotColor = Color(0x14000000)
             )
-            .clip(FluidShapes.lg)
-            .background(colors.surfaceSolid)
+            .background(colors.surfaceSolid, FluidShapes.lg)
             .border(1.dp, colors.divider, FluidShapes.lg)
+            .clip(FluidShapes.lg)
     }
 
     Column(
         modifier = modifier
-            .animateContentSize(animationSpec = FluidSprings.morph(FluidTheme.isReducedMotion))
             .then(backgroundModifier)
+            .animateContentSize(animationSpec = FluidSprings.morph(FluidTheme.isReducedMotion))
             .padding(16.dp),
         content = content
     )
@@ -193,40 +193,40 @@ fun FluidPillButton(
 
     val buttonModifier = if (isPrimary) {
         Modifier
+            .fluidInteractive(
+                enabled = enabled,
+                pressScale = 0.92f,
+                onClick = onClick
+            )
             .height(48.dp)
             .shadow(
                 elevation = if (enabled) 6.dp else 0.dp,
                 shape = FluidShapes.full,
                 spotColor = colors.accent.copy(alpha = 0.45f)
             )
-            .clip(FluidShapes.full)
-            .background(animatedBgColor)
+            .background(animatedBgColor, FluidShapes.full)
             .border(
-                1.dp,
+                1.25.dp,
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = if (enabled) 0.38f else 0.10f),
-                        colors.accent.copy(alpha = 0.20f)
+                        Color.White.copy(alpha = if (enabled) 0.48f else 0.12f),
+                        Color.White.copy(alpha = if (enabled) 0.18f else 0.05f)
                     )
                 ),
                 FluidShapes.full
             )
-            .fluidInteractive(
-                enabled = enabled,
-                pressScale = 0.90f,
-                onClick = onClick
-            )
+            .clip(FluidShapes.full)
     } else {
         Modifier
+            .fluidInteractive(
+                enabled = enabled,
+                pressScale = 0.92f,
+                onClick = onClick
+            )
             .height(48.dp)
             .fluidGlass(
                 level = GlassLevel.THIN,
                 shape = FluidShapes.full
-            )
-            .fluidInteractive(
-                enabled = enabled,
-                pressScale = 0.90f,
-                onClick = onClick
             )
     }
 
@@ -295,11 +295,14 @@ fun FluidFilterChip(
 
     Box(
         modifier = modifier
-            .animateContentSize(animationSpec = FluidSprings.bubbly(isReducedMotion))
             .graphicsLayer {
                 scaleX = chipScale
                 scaleY = chipScale
             }
+            .fluidInteractive(
+                pressScale = 0.94f,
+                onClick = onClick
+            )
             .height(36.dp)
             .fluidGlass(
                 level = GlassLevel.THIN,
@@ -307,14 +310,11 @@ fun FluidFilterChip(
                 isSelected = selected,
                 accentColor = effectiveAccent
             )
-            .fluidInteractive(
-                pressScale = 0.94f,
-                onClick = onClick
-            )
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
+            modifier = Modifier.animateContentSize(animationSpec = FluidSprings.bubbly(isReducedMotion)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {

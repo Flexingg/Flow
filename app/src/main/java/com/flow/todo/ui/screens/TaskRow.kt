@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MoreVert
@@ -65,8 +66,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
+import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidMenuAction
 import com.flow.todo.ui.components.FluidStretchyContextMenu
 import com.flow.todo.ui.theme.FluidShapes
@@ -86,6 +89,7 @@ fun TaskRow(
     onMoveBucket: (GtdBucket) -> Unit,
     onAssignToday: () -> Unit,
     onDelete: () -> Unit,
+    healthSnapshot: HealthDailySnapshot? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -323,8 +327,8 @@ fun TaskRow(
                     )
                 }
 
-                // Badges row: Project, Recurrence, Due Date, Flag with bubbly micro-interactions
-                val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged || task.recurrenceRule?.isRecurring == true
+                // Badges row: Project, Recurrence, Due Date, Health Goal, Flag with bubbly micro-interactions
+                val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged || task.recurrenceRule?.isRecurring == true || task.healthGoal != null
                 this@Column.AnimatedVisibility(
                     visible = hasBadges,
                     enter = badgeEnter,
@@ -436,8 +440,38 @@ fun TaskRow(
                             }
                         }
 
+                        // Health Goal Badge
+                        if (task.healthGoal != null) {
+                            val currentVal = healthSnapshot?.valueFor(task.healthGoal.metricType) ?: 0.0
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(FluidTheme.colors.accent.copy(alpha = 0.12f))
+                                    .border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DirectionsRun,
+                                        contentDescription = "Health Goal",
+                                        tint = FluidTheme.colors.accent,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = task.healthGoal.toDisplayLabel(currentVal),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = FluidTheme.colors.accent
+                                    )
+                                }
+                            }
+                        }
+
                         // Priority Flag - Bubbly pop-in
-                        androidx.compose.animation.AnimatedVisibility(
+                        this@Row.AnimatedVisibility(
                             visible = task.isFlagged,
                             enter = badgeEnter,
                             exit = badgeExit
@@ -469,6 +503,19 @@ fun TaskRow(
                             }
                         }
                     }
+                }
+
+                // Health Goal live progress bar
+                if (task.healthGoal != null) {
+                    val currentVal = healthSnapshot?.valueFor(task.healthGoal.metricType) ?: 0.0
+                    val goalProgress = if (task.isCompleted) 1f else task.healthGoal.progressFraction(currentVal)
+                    FluidGlowingProgressBar(
+                        progress = goalProgress,
+                        accentColor = accentTint,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                    )
                 }
             }
 

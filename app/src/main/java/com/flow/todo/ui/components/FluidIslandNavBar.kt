@@ -111,10 +111,10 @@ fun FluidIslandNavBar(
                     shape = FluidShapes.full
                 )
         ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(4.dp)) {
                 val islandWidthPx = constraints.maxWidth.toFloat()
                 val tabCount = tabs.size
-                val tabWidth = (maxWidth - 8.dp) / tabCount
+                val tabWidth = maxWidth / tabCount
 
                 var lastHapticIndex by remember { mutableIntStateOf(selectedTab.ordinal) }
                 var accumulatedDrag by remember { mutableFloatStateOf(0f) }
@@ -135,7 +135,6 @@ fun FluidIslandNavBar(
                 // Sliding inner pill indicator
                 Box(
                     modifier = Modifier
-                        .padding(vertical = 4.dp, horizontal = 4.dp)
                         .offset(x = tabWidth * animatedIndex - (stretchBonusDp / 2f))
                         .width(tabWidth + stretchBonusDp)
                         .fillMaxHeight()
@@ -147,27 +146,27 @@ fun FluidIslandNavBar(
                             shape = FluidShapes.full,
                             spotColor = colors.accent.copy(alpha = if (colors.isDark) 0.35f else 0.25f)
                         )
-                        .clip(FluidShapes.full)
                         .background(
-                            colors.accent.copy(alpha = if (colors.isDark) 0.24f else 0.16f)
+                            colors.accent.copy(alpha = if (colors.isDark) 0.24f else 0.16f),
+                            shape = FluidShapes.full
                         )
                         .border(
-                            width = 1.dp,
+                            width = 1.5.dp,
                             brush = Brush.verticalGradient(
                                 listOf(
-                                    colors.accent.copy(alpha = if (colors.isDark) 0.70f else 0.50f),
-                                    colors.accent.copy(alpha = if (colors.isDark) 0.25f else 0.15f)
+                                    colors.accent.copy(alpha = if (colors.isDark) 0.88f else 0.72f),
+                                    colors.accent.copy(alpha = if (colors.isDark) 0.50f else 0.38f)
                                 )
                             ),
                             shape = FluidShapes.full
                         )
+                        .clip(FluidShapes.full)
                 )
 
                 // Tab items & gesture handling
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 4.dp)
                         .pointerInput(tabCount, islandWidthPx) {
                             detectHorizontalDragGestures(
                                 onDragStart = { offset ->
@@ -357,15 +356,15 @@ fun FluidIslandNavBar(
             Box(
                 modifier = Modifier
                     .size(60.dp)
+                    .fluidInteractive(
+                        pressScale = 0.86f,
+                        onClick = onQuickAddClick
+                    )
                     .fluidGlass(
                         level = GlassLevel.REGULAR,
                         shape = CircleShape,
                         isSelected = true,
                         accentColor = colors.accent
-                    )
-                    .fluidInteractive(
-                        pressScale = 0.86f,
-                        onClick = onQuickAddClick
                     ),
                 contentAlignment = Alignment.Center
             ) {

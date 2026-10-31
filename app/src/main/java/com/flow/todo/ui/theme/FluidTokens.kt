@@ -79,7 +79,44 @@ object FluidShapes {
     val md = RoundedCornerShape(16.dp)
     val lg = RoundedCornerShape(24.dp)
     val xl = RoundedCornerShape(32.dp)
-    val full = RoundedCornerShape(999.dp)
+    val full = RoundedCornerShape(percent = 50)
+}
+
+object MomentumSpectrum {
+    val Red = Color(0xFFFF3B5C)
+    val Purple = Color(0xFFAF52DE)
+    val Blue = Color(0xFF2F6BFF)
+    val Yellow = Color(0xFFFFB800)
+    val Green = Color(0xFF22B35E)
+
+    val stops: List<Color> = listOf(Red, Purple, Blue, Yellow, Green)
+
+    fun colorForProgress(progress: Float): Color {
+        val clamped = progress.coerceIn(0f, 1f)
+        val scaled = clamped * (stops.size - 1)
+        val index = scaled.toInt().coerceIn(0, stops.size - 2)
+        val fraction = scaled - index
+        return androidx.compose.ui.graphics.lerp(stops[index], stops[index + 1], fraction)
+    }
+
+    fun stageLabel(progress: Float): String {
+        val p = progress.coerceIn(0f, 1f)
+        return when {
+            p < 0.20f -> "Warming Up • Crimson"
+            p < 0.45f -> "Building Spark • Purple"
+            p < 0.70f -> "In The Flow • Cobalt Blue"
+            p < 0.95f -> "Final Surge • Solar Gold"
+            else -> "Flow Complete • Emerald"
+        }
+    }
+
+    fun seedHexForProgress(progress: Float): String {
+        val c = colorForProgress(progress)
+        val r = (c.red * 255f).toInt().coerceIn(0, 255)
+        val g = (c.green * 255f).toInt().coerceIn(0, 255)
+        val b = (c.blue * 255f).toInt().coerceIn(0, 255)
+        return String.format(java.util.Locale.US, "%02X%02X%02X", r, g, b)
+    }
 }
 
 object FluidSpacing {

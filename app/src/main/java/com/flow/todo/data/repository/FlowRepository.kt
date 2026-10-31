@@ -41,7 +41,9 @@ class FlowRepository(
             reduceMotion = prefs.getBoolean(KEY_REDUCE_MOTION, false),
             increasedContrast = prefs.getBoolean(KEY_INCREASED_CONTRAST, false),
             darkThemeOverride = darkThemeOverride,
-            useDynamicColor = prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true)
+            useDynamicColor = prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true),
+            useMomentumColorSpectrum = prefs.getBoolean(KEY_USE_MOMENTUM_SPECTRUM, true),
+            syncSystemColorsWithShizuku = prefs.getBoolean(KEY_SYNC_SHIZUKU_COLORS, false)
         )
     }
 
@@ -86,6 +88,8 @@ class FlowRepository(
             putBoolean(KEY_REDUCE_MOTION, updated.reduceMotion)
             putBoolean(KEY_INCREASED_CONTRAST, updated.increasedContrast)
             putBoolean(KEY_USE_DYNAMIC_COLOR, updated.useDynamicColor)
+            putBoolean(KEY_USE_MOMENTUM_SPECTRUM, updated.useMomentumColorSpectrum)
+            putBoolean(KEY_SYNC_SHIZUKU_COLORS, updated.syncSystemColorsWithShizuku)
             putString(
                 KEY_DARK_THEME_OVERRIDE,
                 when (updated.darkThemeOverride) {
@@ -105,5 +109,7 @@ class FlowRepository(
         private const val KEY_INCREASED_CONTRAST = "increased_contrast"
         private const val KEY_DARK_THEME_OVERRIDE = "dark_theme_override"
         private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
+        private const val KEY_USE_MOMENTUM_SPECTRUM = "use_momentum_spectrum"
+        private const val KEY_SYNC_SHIZUKU_COLORS = "sync_shizuku_colors"
     }
 }

@@ -239,6 +239,7 @@ object FluidTheme {
 @Composable
 fun FluidTheme(
     preferences: AccessibilityPreferences = AccessibilityPreferences(),
+    dailyProgress: Float = 0.5f,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -262,8 +263,8 @@ fun FluidTheme(
 
     val canUseDynamic = preferences.useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    val targetFluidColors = remember(isDark, canUseDynamic, context) {
-        if (canUseDynamic) {
+    val targetFluidColors = remember(isDark, canUseDynamic, preferences.useMomentumColorSpectrum, dailyProgress, context) {
+        val baseColors = if (canUseDynamic) {
             if (isDark) {
                 val dynamicScheme = dynamicDarkColorScheme(context)
                 FluidColors(
@@ -303,6 +304,22 @@ fun FluidTheme(
             }
         } else {
             if (isDark) DarkFluidColors else LightFluidColors
+        }
+
+        if (preferences.useMomentumColorSpectrum) {
+            val momentumAccent = MomentumSpectrum.colorForProgress(dailyProgress)
+            val momentumPressed = lerp(momentumAccent, if (isDark) Color.White else Color.Black, 0.18f)
+            val tintFraction = if (isDark) 0.08f else 0.05f
+
+            baseColors.copy(
+                accent = momentumAccent,
+                accentPressed = momentumPressed,
+                bgBase = lerp(baseColors.bgBase, momentumAccent, tintFraction),
+                surfaceSolid = lerp(baseColors.surfaceSolid, momentumAccent, tintFraction),
+                surfaceRaised = lerp(baseColors.surfaceRaised, momentumAccent, tintFraction)
+            )
+        } else {
+            baseColors
         }
     }
 

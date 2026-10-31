@@ -17,6 +17,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,13 +30,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.Upcoming
@@ -51,14 +57,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.HealthDailySnapshot
+import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
+import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidInsetCard
 import com.flow.todo.ui.components.FluidPillButton
@@ -67,6 +81,7 @@ import com.flow.todo.ui.theme.FluidSpacing
 import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
 import com.flow.todo.ui.theme.GlassLevel
+import com.flow.todo.ui.theme.MomentumSpectrum
 import com.flow.todo.ui.theme.fluidGlass
 import com.flow.todo.ui.theme.fluidInteractive
 
@@ -80,6 +95,14 @@ fun TodayNextScreen(
     projects: List<Project>,
     completedTodayCount: Int,
     totalTodayTargetCount: Int,
+    dailyProgress: Float = 0f,
+    healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
+    shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
+    syncSystemColorsWithShizuku: Boolean = false,
+    onRequestHealthPermissions: () -> Unit = {},
+    onRefreshHealthStats: () -> Unit = {},
+    onAddQuickHealthGoal: (HealthMetricType, Double) -> Unit = { _, _ -> },
+    onOpenSettings: () -> Unit = {},
     onToggleComplete: (String) -> Unit,
     onToggleFlag: (String) -> Unit,
     onMoveBucket: (String, GtdBucket) -> Unit,
@@ -90,14 +113,18 @@ fun TodayNextScreen(
     modifier: Modifier = Modifier
 ) {
     val isReducedMotion = FluidTheme.isReducedMotion
+    val haptic = LocalHapticFeedback.current
     var selectedMode by remember { mutableIntStateOf(0) } // 0: Today & Next, 1: Next Week Queue
 
-    val progressFraction = if (totalTodayTargetCount > 0) {
+    val effectiveProgress = if (dailyProgress > 0f) {
+        dailyProgress.coerceIn(0f, 1f)
+    } else if (totalTodayTargetCount > 0) {
         (completedTodayCount.toFloat() / totalTodayTargetCount.toFloat()).coerceIn(0f, 1f)
     } else {
         0f
     }
-    val progressPercent = (progressFraction * 100).toInt()
+    val progressPercent = (effectiveProgress * 100).toInt()
+    val momentumAccentColor = MomentumSpectrum.colorForProgress(effectiveProgress)
 
     LazyColumn(
         state = listState,
@@ -114,7 +141,7 @@ fun TodayNextScreen(
         item {
             FluidInsetCard(
                 modifier = Modifier.fillMaxWidth(),
-                accentGlowColor = FluidTheme.colors.accent.copy(alpha = 0.40f)
+                accentGlowColor = momentumAccentColor.copy(alpha = 0.40f)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -127,15 +154,15 @@ fun TodayNextScreen(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.2.sp,
-                            color = FluidTheme.colors.accent
+                            color = momentumAccentColor
                         )
 
                         // Percentage Badge with Bouncy Slide + ScaleIn
                         Box(
                             modifier = Modifier
                                 .clip(FluidShapes.full)
-                                .background(FluidTheme.colors.accent.copy(alpha = 0.12f))
-                                .border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.28f), FluidShapes.full)
+                                .background(momentumAccentColor.copy(alpha = 0.12f))
+                                .border(1.dp, momentumAccentColor.copy(alpha = 0.28f), FluidShapes.full)
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             AnimatedContent(
@@ -168,7 +195,7 @@ fun TodayNextScreen(
                                     text = "$percent%",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = FluidTheme.colors.accent
+                                    color = momentumAccentColor
                                 )
                             }
                         }
@@ -249,10 +276,101 @@ fun TodayNextScreen(
 
                     // Luminous comet progress bar
                     FluidGlowingProgressBar(
-                        progress = progressFraction,
-                        accentColor = FluidTheme.colors.accent,
+                        progress = effectiveProgress,
+                        accentColor = momentumAccentColor,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // 5-Stop Daily Momentum Spectrum Bar
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 5 Glowing Spectrum Dots + Stage Label
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val spectrumDots = MomentumSpectrum.stops
+                            val activeDotIndex = when {
+                                effectiveProgress >= 0.80f -> 4
+                                effectiveProgress >= 0.60f -> 3
+                                effectiveProgress >= 0.40f -> 2
+                                effectiveProgress >= 0.20f -> 1
+                                else -> 0
+                            }
+
+                            spectrumDots.forEachIndexed { idx, dotColor ->
+                                val isActive = idx == activeDotIndex
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (isActive) 12.dp else 8.dp)
+                                        .then(
+                                            if (isActive) {
+                                                Modifier.shadow(elevation = 6.dp, shape = CircleShape, spotColor = dotColor)
+                                            } else Modifier
+                                        )
+                                        .clip(CircleShape)
+                                        .background(if (isActive) dotColor else dotColor.copy(alpha = 0.35f))
+                                        .border(
+                                            width = if (isActive) 1.5.dp else 0.5.dp,
+                                            color = if (isActive) Color.White.copy(alpha = 0.85f) else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            Text(
+                                text = MomentumSpectrum.stageLabel(effectiveProgress),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                        }
+
+                        // Shizuku System UI Sync status pill chip
+                        val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
+                        val shizukuPillText = if (isSyncActive) "System UI Sync: Active" else "Sync System UI Colors →"
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(
+                                    if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.12f)
+                                    else FluidTheme.colors.accent.copy(alpha = 0.10f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.28f)
+                                    else FluidTheme.colors.accent.copy(alpha = 0.24f),
+                                    FluidShapes.full
+                                )
+                                .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent)
+                                )
+                                Text(
+                                    text = shizukuPillText,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -272,11 +390,6 @@ fun TodayNextScreen(
                 ) {
                     // Mode 0: Today & Next
                     val isMode0 = selectedMode == 0
-                    val bg0 by animateColorAsState(
-                        targetValue = if (isMode0) FluidTheme.colors.accent.copy(alpha = 0.18f) else Color.Transparent,
-                        animationSpec = FluidSprings.morph(isReducedMotion),
-                        label = "mode0Bg"
-                    )
                     val text0Color by animateColorAsState(
                         targetValue = if (isMode0) FluidTheme.colors.accent else FluidTheme.colors.textSecondary,
                         animationSpec = FluidSprings.morph(isReducedMotion),
@@ -285,13 +398,26 @@ fun TodayNextScreen(
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .fluidInteractive(pressScale = 0.95f, onClick = { selectedMode = 0 })
                             .clip(FluidShapes.full)
-                            .background(bg0)
-                            .then(
-                                if (isMode0) Modifier.border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.35f), FluidShapes.full)
-                                else Modifier
+                            .background(
+                                if (isMode0) FluidTheme.colors.accent.copy(alpha = if (FluidTheme.colors.isDark) 0.24f else 0.16f)
+                                else Color.Transparent
                             )
-                            .fluidInteractive(onClick = { selectedMode = 0 })
+                            .then(
+                                if (isMode0) {
+                                    Modifier.border(
+                                        1.5.dp,
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                FluidTheme.colors.accent.copy(alpha = 0.90f),
+                                                FluidTheme.colors.accent.copy(alpha = 0.60f)
+                                            )
+                                        ),
+                                        FluidShapes.full
+                                    )
+                                } else Modifier
+                            )
                             .padding(vertical = 10.dp, horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -316,11 +442,6 @@ fun TodayNextScreen(
 
                     // Mode 1: Next Week Queue ($upcomingWeekTotalCount)
                     val isMode1 = selectedMode == 1
-                    val bg1 by animateColorAsState(
-                        targetValue = if (isMode1) FluidTheme.colors.accent.copy(alpha = 0.18f) else Color.Transparent,
-                        animationSpec = FluidSprings.morph(isReducedMotion),
-                        label = "mode1Bg"
-                    )
                     val text1Color by animateColorAsState(
                         targetValue = if (isMode1) FluidTheme.colors.accent else FluidTheme.colors.textSecondary,
                         animationSpec = FluidSprings.morph(isReducedMotion),
@@ -329,13 +450,26 @@ fun TodayNextScreen(
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .fluidInteractive(pressScale = 0.95f, onClick = { selectedMode = 1 })
                             .clip(FluidShapes.full)
-                            .background(bg1)
-                            .then(
-                                if (isMode1) Modifier.border(1.dp, FluidTheme.colors.accent.copy(alpha = 0.35f), FluidShapes.full)
-                                else Modifier
+                            .background(
+                                if (isMode1) FluidTheme.colors.accent.copy(alpha = if (FluidTheme.colors.isDark) 0.24f else 0.16f)
+                                else Color.Transparent
                             )
-                            .fluidInteractive(onClick = { selectedMode = 1 })
+                            .then(
+                                if (isMode1) {
+                                    Modifier.border(
+                                        1.5.dp,
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                FluidTheme.colors.accent.copy(alpha = 0.90f),
+                                                FluidTheme.colors.accent.copy(alpha = 0.60f)
+                                            )
+                                        ),
+                                        FluidShapes.full
+                                    )
+                                } else Modifier
+                            )
                             .padding(vertical = 10.dp, horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -399,6 +533,206 @@ fun TodayNextScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(FluidSpacing.lg)
                     ) {
+                        // Section 0: Health Connect & Biometric Goals Card
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = FluidTheme.colors.accent.copy(alpha = 0.25f)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Favorite,
+                                            contentDescription = null,
+                                            tint = FluidTheme.colors.accent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Health Connect & Goals",
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.textPrimary
+                                        )
+                                        Text(
+                                            text = "Live biometrics & auto-tracked GTD goals",
+                                            fontSize = 11.sp,
+                                            color = FluidTheme.colors.textTertiary
+                                        )
+                                    }
+                                }
+
+                                // Permission status badge
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(
+                                            if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success.copy(alpha = 0.12f)
+                                            else FluidTheme.colors.accent.copy(alpha = 0.12f)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success.copy(alpha = 0.28f)
+                                            else FluidTheme.colors.accent.copy(alpha = 0.28f),
+                                            FluidShapes.full
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${healthSnapshot.grantedPermissionCount}/${healthSnapshot.totalPermissionCount} perms",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (healthSnapshot.hasAllPermissions) FluidTheme.colors.success else FluidTheme.colors.accent
+                                    )
+                                }
+                            }
+
+                            // If not all permissions granted, show prominent grant button alongside refresh chip
+                            if (!healthSnapshot.hasAllPermissions) {
+                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FluidPillButton(
+                                        text = "Grant All Health Connect Permissions",
+                                        onClick = onRequestHealthPermissions,
+                                        isPrimary = true,
+                                        leadingIcon = Icons.Rounded.Favorite,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .fluidGlass(GlassLevel.THIN, FluidShapes.full)
+                                            .fluidInteractive(pressScale = 0.90f, onClick = onRefreshHealthStats),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Refresh,
+                                            contentDescription = "Refresh",
+                                            tint = FluidTheme.colors.textPrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                            // Live Biometric Stat Strip
+                            Text(
+                                text = "TODAY'S LIVE READINGS",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = FluidTheme.colors.textTertiary
+                            )
+                            Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                HealthMetricType.entries.forEach { metric ->
+                                    val currentVal = healthSnapshot.valueFor(metric)
+                                    Box(
+                                        modifier = Modifier
+                                            .widthIn(min = 96.dp)
+                                            .fluidGlass(GlassLevel.THIN, FluidShapes.md)
+                                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = metric.label,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = FluidTheme.colors.textSecondary,
+                                                maxLines = 1
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = metric.formatValue(currentVal),
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = FluidTheme.colors.textPrimary
+                                            )
+                                            Text(
+                                                text = metric.unit,
+                                                fontSize = 10.sp,
+                                                color = FluidTheme.colors.textTertiary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                            // 1-Tap Health Goals
+                            Text(
+                                text = "1-TAP HEALTH GOALS",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = FluidTheme.colors.textTertiary
+                            )
+                            Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val quickGoals = listOf(
+                                    HealthMetricType.STEPS to 10000.0,
+                                    HealthMetricType.ACTIVE_CALORIES to 500.0,
+                                    HealthMetricType.EXERCISE_MINUTES to 30.0,
+                                    HealthMetricType.SLEEP_HOURS to 7.5,
+                                    HealthMetricType.HYDRATION_LITERS to 2.5,
+                                    HealthMetricType.DISTANCE_KM to 5.0,
+                                    HealthMetricType.FLOORS_CLIMBED to 10.0
+                                )
+                                quickGoals.forEach { (metric, target) ->
+                                    val label = when (metric) {
+                                        HealthMetricType.STEPS -> "+ 10,000 Steps"
+                                        HealthMetricType.ACTIVE_CALORIES -> "+ 500 kcal"
+                                        HealthMetricType.EXERCISE_MINUTES -> "+ 30 min Exercise"
+                                        HealthMetricType.SLEEP_HOURS -> "+ 7.5 hrs Sleep"
+                                        HealthMetricType.HYDRATION_LITERS -> "+ 2.5 L Water"
+                                        HealthMetricType.DISTANCE_KM -> "+ 5.0 km Distance"
+                                        HealthMetricType.FLOORS_CLIMBED -> "+ 10 Floors"
+                                        else -> "+ ${metric.formatValue(target)} ${metric.unit}"
+                                    }
+                                    FluidFilterChip(
+                                        label = label,
+                                        selected = false,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onAddQuickHealthGoal(metric, target)
+                                        },
+                                        leadingIcon = Icons.Rounded.DirectionsRun
+                                    )
+                                }
+                            }
+                        }
+
                         // Section 1: Due Today & Flagged
                         FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
                             Row(
@@ -504,7 +838,8 @@ fun TodayNextScreen(
                                                     onToggleFlag = { onToggleFlag(task.id) },
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
-                                                    onDelete = { onDeleteTask(task.id) }
+                                                    onDelete = { onDeleteTask(task.id) },
+                                                    healthSnapshot = healthSnapshot
                                                 )
                                             }
                                         }
@@ -625,7 +960,8 @@ fun TodayNextScreen(
                                                     onToggleFlag = { onToggleFlag(task.id) },
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
-                                                    onDelete = { onDeleteTask(task.id) }
+                                                    onDelete = { onDeleteTask(task.id) },
+                                                    healthSnapshot = healthSnapshot
                                                 )
                                             }
                                         }
@@ -727,7 +1063,8 @@ fun TodayNextScreen(
                                                     onToggleFlag = { onToggleFlag(task.id) },
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
-                                                    onDelete = { onDeleteTask(task.id) }
+                                                    onDelete = { onDeleteTask(task.id) },
+                                                    healthSnapshot = healthSnapshot
                                                 )
                                             }
                                         }
@@ -911,7 +1248,7 @@ fun TodayNextScreen(
                                     } else {
                                         dayGroup.tasks.forEachIndexed { index, task ->
                                             key("${dayGroup.epochDay}_${task.id}") {
-                                                androidx.compose.animation.AnimatedVisibility(
+                                                this@Column.AnimatedVisibility(
                                                     visible = true,
                                                     enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
                                                             expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
@@ -933,7 +1270,8 @@ fun TodayNextScreen(
                                                             onToggleFlag = { onToggleFlag(task.id) },
                                                             onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                             onAssignToday = { onAssignToday(task.id) },
-                                                            onDelete = { onDeleteTask(task.id) }
+                                                            onDelete = { onDeleteTask(task.id) },
+                                                            healthSnapshot = healthSnapshot
                                                         )
                                                     }
                                                 }
@@ -1009,7 +1347,7 @@ fun TodayNextScreen(
 
                                     laterScheduledTasks.forEachIndexed { index, task ->
                                         key("later_${task.id}") {
-                                            androidx.compose.animation.AnimatedVisibility(
+                                            this@Column.AnimatedVisibility(
                                                 visible = true,
                                                 enter = fadeIn(FluidSprings.morph(isReducedMotion)) +
                                                         expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
@@ -1031,7 +1369,8 @@ fun TodayNextScreen(
                                                         onToggleFlag = { onToggleFlag(task.id) },
                                                         onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                         onAssignToday = { onAssignToday(task.id) },
-                                                        onDelete = { onDeleteTask(task.id) }
+                                                        onDelete = { onDeleteTask(task.id) },
+                                                        healthSnapshot = healthSnapshot
                                                     )
                                                 }
                                             }

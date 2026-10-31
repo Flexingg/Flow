@@ -52,15 +52,19 @@ fun Modifier.fluidGlass(
     val prefs = FluidTheme.prefs
     val spec = FluidTheme.glassSpec(level)
 
-    val borderWidth = if (prefs.increasedContrast) 1.5.dp else 1.dp
+    val borderWidth = when {
+        prefs.increasedContrast -> 1.75.dp
+        isSelected -> 1.5.dp
+        else -> 1.dp
+    }
 
     val strokeBrush = remember(spec, isSelected, accentColor, colors) {
         if (isSelected) {
             val active = accentColor ?: colors.accent
             Brush.verticalGradient(
                 listOf(
-                    active.copy(alpha = 0.85f),
-                    active.copy(alpha = 0.40f)
+                    lerp(active, Color.White, if (colors.isDark) 0.22f else 0.10f).copy(alpha = 0.95f),
+                    active.copy(alpha = 0.75f)
                 )
             )
         } else {
@@ -78,11 +82,9 @@ fun Modifier.fluidGlass(
             Brush.verticalGradient(listOf(spec.fillColor, spec.fillColor))
         } else if (isSelected) {
             val active = accentColor ?: colors.accent
-            Brush.verticalGradient(
-                0.0f to active.copy(alpha = if (colors.isDark) 0.22f else 0.16f),
-                0.45f to spec.fillColor,
-                1.0f to spec.fillColor
-            )
+            val topTint = lerp(spec.fillColor, active, if (colors.isDark) 0.30f else 0.20f)
+            val bottomTint = lerp(spec.fillColor, active, if (colors.isDark) 0.16f else 0.10f)
+            Brush.verticalGradient(listOf(topTint, bottomTint))
         } else {
             val sheen = if (colors.isDark) 0.08f else 0.14f
             Brush.verticalGradient(
@@ -111,9 +113,9 @@ fun Modifier.fluidGlass(
             ambientColor = ambientColor,
             spotColor = spotColor
         )
-        .clip(shape)
         .background(backgroundBrush, shape)
         .border(borderWidth, strokeBrush, shape)
+        .clip(shape)
 }
 
 /**

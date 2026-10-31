@@ -63,11 +63,12 @@ import java.time.LocalDate
  * - Per-tab LazyListState tracking for progressive blur / morphing TopBar
  * - Floating Island Navigation Bar with progressive bottom blur ramp
  * - Smooth spring-morph AnimatedContent screen transitions
- * - Integrated Quick Capture & Settings bottom sheets
+ * - Integrated Quick Capture & Settings bottom sheets with Health Connect & Shizuku System UI Color Sync
  */
 @Composable
 fun FlowAppShell(
     viewModel: FlowViewModel,
+    onRequestHealthPermissions: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -131,7 +132,7 @@ fun FlowAppShell(
         bottom = bottomInset + 96.dp
     )
 
-    // Slow ambient breathing glow transition tinted with Material You accent
+    // Slow ambient breathing glow transition tinted with active Momentum / Material You accent
     val ambientTransition = rememberInfiniteTransition(label = "ambientGlowTransition")
     val ambientScale by ambientTransition.animateFloat(
         initialValue = 0.88f,
@@ -143,8 +144,8 @@ fun FlowAppShell(
         label = "ambientScale"
     )
     val ambientAlpha by ambientTransition.animateFloat(
-        initialValue = if (colors.isDark) 0.06f else 0.04f,
-        targetValue = if (colors.isDark) 0.12f else 0.08f,
+        initialValue = if (colors.isDark) 0.08f else 0.05f,
+        targetValue = if (colors.isDark) 0.16f else 0.10f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 4000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -159,7 +160,7 @@ fun FlowAppShell(
             .drawBehind {
                 // Living Flow ambient soft radial glow centered near the top edge
                 val effectiveRadius = (size.width * 0.9f) * (if (isReducedMotion) 1f else ambientScale)
-                val effectiveAlpha = if (isReducedMotion) (if (colors.isDark) 0.08f else 0.05f) else ambientAlpha
+                val effectiveAlpha = if (isReducedMotion) (if (colors.isDark) 0.10f else 0.06f) else ambientAlpha
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -246,6 +247,16 @@ fun FlowAppShell(
                         projects = uiState.projects,
                         completedTodayCount = uiState.completedTodayCount,
                         totalTodayTargetCount = uiState.totalTodayTargetCount,
+                        dailyProgress = uiState.dailyProgress,
+                        healthSnapshot = uiState.healthSnapshot,
+                        shizukuStatus = uiState.shizukuStatus,
+                        syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
+                        onRequestHealthPermissions = onRequestHealthPermissions,
+                        onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus,
+                        onAddQuickHealthGoal = { metric, target ->
+                            viewModel.addQuickHealthGoalTask(metric, target, isDailyRecurring = true)
+                        },
+                        onOpenSettings = { viewModel.setSettingsOpen(true) },
                         onToggleComplete = viewModel::toggleTaskCompletion,
                         onToggleFlag = viewModel::toggleTaskFlag,
                         onMoveBucket = viewModel::updateTaskBucket,
@@ -309,7 +320,7 @@ fun FlowAppShell(
             QuickCaptureSheet(
                 projects = uiState.projects,
                 onDismiss = { viewModel.setQuickCaptureOpen(false) },
-                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule ->
+                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal ->
                     viewModel.addTask(
                         title = title,
                         notes = notes,
@@ -317,18 +328,28 @@ fun FlowAppShell(
                         dueDateEpochDay = dueDateEpochDay,
                         projectId = projectId,
                         isFlagged = isFlagged,
-                        recurrenceRule = recurrenceRule
+                        recurrenceRule = recurrenceRule,
+                        healthGoal = healthGoal
                     )
                 }
             )
         }
 
-        // Living Flow Settings & Accessibility Sheet
+        // Living Flow Settings, Momentum Spectrum, Shizuku & Health Connect Sheet
         if (uiState.isSettingsOpen) {
             FluidSettingsSheet(
                 preferences = uiState.accessibility,
                 onUpdatePreferences = viewModel::updateAccessibility,
-                onDismiss = { viewModel.setSettingsOpen(false) }
+                onDismiss = { viewModel.setSettingsOpen(false) },
+                dailyProgress = uiState.dailyProgress,
+                shizukuStatus = uiState.shizukuStatus,
+                lastSyncedSystemColorHex = uiState.lastSyncedSystemColorHex,
+                healthSnapshot = uiState.healthSnapshot,
+                onRequestShizukuPermission = viewModel::requestShizukuPermission,
+                onSyncSystemColorsNow = viewModel::syncSystemColorsNow,
+                onRestoreSystemPalette = viewModel::restoreOriginalSystemPalette,
+                onRequestHealthPermissions = onRequestHealthPermissions,
+                onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus
             )
         }
 

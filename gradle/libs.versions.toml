@@ -9,6 +9,8 @@ composeBom = "2024.10.01"
 room = "2.6.1"
 haze = "1.0.0"
 coroutines = "1.9.0"
+healthConnect = "1.1.0-alpha10"
+shizuku = "13.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +41,11 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # Haze
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
+
+# Health Connect & Shizuku
+androidx-health-connect = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

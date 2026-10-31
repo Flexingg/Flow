@@ -3,19 +3,29 @@ package com.flow.todo.ui.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
+import com.flow.todo.data.system.ShizukuSystemColorManager
 import com.flow.todo.domain.model.AccessibilityPreferences
 import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.HealthDailySnapshot
+import com.flow.todo.domain.model.HealthGoalSpec
+import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.ProjectWithStats
 import com.flow.todo.domain.model.RecurrenceRule
+import com.flow.todo.domain.model.RecurrenceType
+import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -43,10 +53,18 @@ data class FlowUiState(
     val totalTodayTargetCount: Int = 0,
     val isQuickCaptureOpen: Boolean = false,
     val isSettingsOpen: Boolean = false,
-    val accessibility: AccessibilityPreferences = AccessibilityPreferences()
+    val accessibility: AccessibilityPreferences = AccessibilityPreferences(),
+    val dailyProgress: Float = 0f,
+    val healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
+    val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
+    val lastSyncedSystemColorHex: String? = null
 )
 
-class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
+class FlowViewModel(
+    private val repository: FlowRepository,
+    private val healthConnectManager: HealthConnectManager? = null,
+    private val shizukuManager: ShizukuSystemColorManager? = null
+) : ViewModel() {
 
     private data class LocalUiFlags(
         val selectedTab: FlowTab = FlowTab.INBOX,
@@ -54,15 +72,43 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         val isSettingsOpen: Boolean = false
     )
 
+    private data class SystemHealthState(
+        val healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
+        val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
+        val lastAppliedHex: String? = null
+    )
+
     private val _localFlags = MutableStateFlow(LocalUiFlags())
     private val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+
+    private val healthSnapshotFlow: Flow<HealthDailySnapshot> =
+        healthConnectManager?.snapshot ?: MutableStateFlow(HealthDailySnapshot())
+
+    private val shizukuStatusFlow: Flow<ShizukuStatus> =
+        shizukuManager?.status ?: MutableStateFlow(ShizukuStatus.NOT_INSTALLED)
+
+    private val lastAppliedHexFlow: Flow<String?> =
+        shizukuManager?.lastAppliedHex ?: MutableStateFlow(null)
+
+    private val systemHealthFlow: Flow<SystemHealthState> = combine(
+        healthSnapshotFlow,
+        shizukuStatusFlow,
+        lastAppliedHexFlow
+    ) { health, shizuku, hex ->
+        SystemHealthState(
+            healthSnapshot = health,
+            shizukuStatus = shizuku,
+            lastAppliedHex = hex
+        )
+    }
 
     val uiState: StateFlow<FlowUiState> = combine(
         _localFlags,
         repository.observeTasks(),
         repository.observeProjects(),
-        repository.accessibilityPreferences
-    ) { flags, tasks, projects, accessibility ->
+        repository.accessibilityPreferences,
+        systemHealthFlow
+    ) { flags, tasks, projects, accessibility, sysHealth ->
         val today = LocalDate.now()
         val todayEpochDay = today.toEpochDay()
         val nextWeekEndEpochDay = today.plusDays(7).toEpochDay()
@@ -139,6 +185,22 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         val completedTodayCount = todayTasks.count { it.isCompleted }
         val totalTodayTargetCount = todayTasks.size
 
+        val dailyProgress = if (todayTasks.isEmpty()) {
+            0f
+        } else {
+            val totalScore = todayTasks.sumOf { task ->
+                when {
+                    task.isCompleted -> 1.0
+                    task.healthGoal != null -> {
+                        val currentVal = sysHealth.healthSnapshot.valueFor(task.healthGoal.metricType)
+                        task.healthGoal.progressFraction(currentVal).toDouble()
+                    }
+                    else -> 0.0
+                }
+            }
+            (totalScore / todayTasks.size.toDouble()).toFloat().coerceIn(0f, 1f)
+        }
+
         FlowUiState(
             selectedTab = flags.selectedTab,
             allTasks = tasks,
@@ -155,13 +217,51 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
             totalTodayTargetCount = totalTodayTargetCount,
             isQuickCaptureOpen = flags.isQuickCaptureOpen,
             isSettingsOpen = flags.isSettingsOpen,
-            accessibility = accessibility
+            accessibility = accessibility,
+            dailyProgress = dailyProgress,
+            healthSnapshot = sysHealth.healthSnapshot,
+            shizukuStatus = sysHealth.shizukuStatus,
+            lastSyncedSystemColorHex = sysHealth.lastAppliedHex
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = FlowUiState()
     )
+
+    init {
+        viewModelScope.launch {
+            refreshHealthAndSystemStatus()
+        }
+
+        viewModelScope.launch {
+            uiState
+                .map { it.accessibility.syncSystemColorsWithShizuku to it.dailyProgress }
+                .distinctUntilChanged()
+                .collect { (syncEnabled, progress) ->
+                    if (syncEnabled) {
+                        shizukuManager?.applyMomentumColorForProgress(progress)
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            uiState
+                .map { it.healthSnapshot }
+                .distinctUntilChanged()
+                .collect { snapshot ->
+                    val uncompletedHealthTasks = uiState.value.todayTasks.filter {
+                        !it.isCompleted && it.healthGoal != null
+                    }
+                    for (task in uncompletedHealthTasks) {
+                        val goal = task.healthGoal ?: continue
+                        if (goal.targetValue > 0 && snapshot.valueFor(goal.metricType) >= goal.targetValue) {
+                            toggleTaskCompletion(task.id)
+                        }
+                    }
+                }
+        }
+    }
 
     fun selectTab(tab: FlowTab) {
         _localFlags.update { it.copy(selectedTab = tab) }
@@ -182,7 +282,8 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
         dueDateEpochDay: Long? = null,
         projectId: String? = null,
         isFlagged: Boolean = false,
-        recurrenceRule: RecurrenceRule? = null
+        recurrenceRule: RecurrenceRule? = null,
+        healthGoal: HealthGoalSpec? = null
     ) {
         if (title.isBlank()) return
         val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
@@ -207,6 +308,7 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
             isFlagged = isFlagged,
             isCompleted = false,
             recurrenceRule = if (hasRecurrence) recurrenceRule else null,
+            healthGoal = healthGoal,
             createdAt = System.currentTimeMillis(),
             completedAt = null
         )
@@ -214,6 +316,58 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
             repository.upsertTask(newTask)
         }
     }
+
+    fun addQuickHealthGoalTask(
+        metricType: HealthMetricType,
+        targetValue: Double = metricType.defaultTarget,
+        isDailyRecurring: Boolean = true
+    ) {
+        val title = "Reach ${metricType.formatValue(targetValue)} ${metricType.unit} (${metricType.label})"
+        val todayEpochDay = LocalDate.now().toEpochDay()
+        val recurrence = if (isDailyRecurring) RecurrenceRule(type = RecurrenceType.DAILY) else null
+        val goal = HealthGoalSpec(metricType = metricType, targetValue = targetValue)
+
+        addTask(
+            title = title,
+            notes = "Auto-synced via Health Connect",
+            bucket = GtdBucket.SCHEDULED,
+            dueDateEpochDay = todayEpochDay,
+            recurrenceRule = recurrence,
+            healthGoal = goal
+        )
+
+        viewModelScope.launch {
+            healthConnectManager?.refreshDailySnapshot()
+        }
+    }
+
+    fun refreshHealthAndSystemStatus() {
+        viewModelScope.launch {
+            shizukuManager?.refreshStatus()
+            healthConnectManager?.refreshDailySnapshot()
+            if (uiState.value.accessibility.syncSystemColorsWithShizuku) {
+                shizukuManager?.applyMomentumColorForProgress(uiState.value.dailyProgress)
+            }
+        }
+    }
+
+    fun requestShizukuPermission() {
+        shizukuManager?.requestPermission()
+    }
+
+    fun syncSystemColorsNow() {
+        viewModelScope.launch {
+            shizukuManager?.applyMomentumColorForProgress(uiState.value.dailyProgress, force = true)
+        }
+    }
+
+    fun restoreOriginalSystemPalette() {
+        viewModelScope.launch {
+            shizukuManager?.restoreOriginalSystemPalette()
+        }
+    }
+
+    fun getAllHealthPermissions(): Set<String> = healthConnectManager?.allReadPermissions ?: emptySet()
 
     fun toggleTaskCompletion(taskId: String) {
         val task = uiState.value.allTasks.find { it.id == taskId } ?: return
@@ -366,12 +520,16 @@ class FlowViewModel(private val repository: FlowRepository) : ViewModel() {
     }
 
     companion object {
-        fun provideFactory(repository: FlowRepository): ViewModelProvider.Factory =
+        fun provideFactory(
+            repository: FlowRepository,
+            healthConnectManager: HealthConnectManager? = null,
+            shizukuManager: ShizukuSystemColorManager? = null
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(FlowViewModel::class.java)) {
-                        return FlowViewModel(repository) as T
+                        return FlowViewModel(repository, healthConnectManager, shizukuManager) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
                 }

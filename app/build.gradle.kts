@@ -69,4 +69,9 @@ dependencies {
 
     // Haze
     implementation(libs.haze)
+
+    // Health Connect & Shizuku
+    implementation(libs.androidx.health.connect)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 }

@@ -214,6 +214,93 @@ data class Project(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+enum class HealthMetricType(
+    val label: String,
+    val unit: String,
+    val defaultTarget: Double,
+    val presetTargets: List<Double>
+) {
+    STEPS("Steps", "steps", 10000.0, listOf(5000.0, 8000.0, 10000.0, 12000.0, 15000.0)),
+    ACTIVE_CALORIES("Active Calories", "kcal", 500.0, listOf(300.0, 450.0, 600.0, 800.0)),
+    EXERCISE_MINUTES("Exercise Time", "min", 30.0, listOf(20.0, 30.0, 45.0, 60.0)),
+    SLEEP_HOURS("Sleep Duration", "hrs", 7.5, listOf(6.5, 7.0, 7.5, 8.0, 8.5)),
+    DISTANCE_KM("Distance", "km", 5.0, listOf(3.0, 5.0, 8.0, 10.0)),
+    HYDRATION_LITERS("Hydration", "L", 2.5, listOf(1.5, 2.0, 2.5, 3.0, 3.5)),
+    FLOORS_CLIMBED("Floors Climbed", "floors", 10.0, listOf(5.0, 10.0, 15.0, 20.0)),
+    WEIGHT_KG("Body Weight", "kg", 70.0, listOf(60.0, 65.0, 70.0, 75.0, 80.0)),
+    RESTING_HEART_RATE("Avg Heart Rate", "bpm", 65.0, listOf(55.0, 60.0, 65.0, 70.0));
+
+    fun formatValue(value: Double): String {
+        return when (this) {
+            STEPS, ACTIVE_CALORIES, EXERCISE_MINUTES, FLOORS_CLIMBED, RESTING_HEART_RATE ->
+                String.format(Locale.US, "%,d", value.toLong())
+            SLEEP_HOURS, DISTANCE_KM, HYDRATION_LITERS, WEIGHT_KG ->
+                String.format(Locale.US, "%.1f", value)
+        }
+    }
+}
+
+data class HealthGoalSpec(
+    val metricType: HealthMetricType,
+    val targetValue: Double
+) {
+    fun toStorageString(): String = "${metricType.name}|$targetValue"
+
+    fun toDisplayLabel(currentValue: Double? = null): String {
+        val targetStr = metricType.formatValue(targetValue)
+        return if (currentValue != null) {
+            val currentStr = metricType.formatValue(currentValue)
+            "${metricType.label}: $currentStr / $targetStr ${metricType.unit}"
+        } else {
+            "${metricType.label}: $targetStr ${metricType.unit}"
+        }
+    }
+
+    fun progressFraction(currentValue: Double?): Float {
+        if (currentValue == null || targetValue <= 0.0) return 0f
+        return (currentValue / targetValue).toFloat().coerceIn(0f, 1f)
+    }
+
+    companion object {
+        fun fromStorageString(raw: String?): HealthGoalSpec? {
+            if (raw.isNullOrBlank()) return null
+            return runCatching {
+                val parts = raw.split("|")
+                val type = HealthMetricType.valueOf(parts[0])
+                val target = parts[1].toDouble()
+                HealthGoalSpec(type, target)
+            }.getOrNull()
+        }
+    }
+}
+
+data class HealthDailySnapshot(
+    val isSdkAvailable: Boolean = false,
+    val grantedPermissionCount: Int = 0,
+    val totalPermissionCount: Int = 19,
+    val metrics: Map<HealthMetricType, Double> = emptyMap(),
+    val lastSyncedMillis: Long = 0L
+) {
+    val hasAnyPermission: Boolean
+        get() = grantedPermissionCount > 0
+
+    val hasAllPermissions: Boolean
+        get() = grantedPermissionCount >= totalPermissionCount && totalPermissionCount > 0
+
+    fun valueFor(type: HealthMetricType): Double = metrics[type] ?: 0.0
+}
+
+enum class ShizukuStatus(val label: String, val description: String) {
+    READY_SECURE_SETTINGS("Active (Direct)", "WRITE_SECURE_SETTINGS granted • Instant System UI morphing"),
+    READY_SHIZUKU("Active (Shizuku)", "Shizuku authorized • System UI colors morph with daily progress"),
+    PERMISSION_REQUIRED("Permission Needed", "Tap to authorize Flow in Shizuku"),
+    NOT_RUNNING("Shizuku Not Running", "Open & start Shizuku to sync Android System UI colors"),
+    NOT_INSTALLED("Shizuku Not Installed", "Install Shizuku to unlock OS-wide Material You color morphing");
+
+    val isReady: Boolean
+        get() = this == READY_SECURE_SETTINGS || this == READY_SHIZUKU
+}
+
 data class TaskItem(
     val id: String,
     val title: String,
@@ -224,6 +311,7 @@ data class TaskItem(
     val isFlagged: Boolean = false,
     val isCompleted: Boolean = false,
     val recurrenceRule: RecurrenceRule? = null,
+    val healthGoal: HealthGoalSpec? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null
 )
@@ -251,5 +339,7 @@ data class AccessibilityPreferences(
     val reduceMotion: Boolean = false,
     val increasedContrast: Boolean = false,
     val darkThemeOverride: Boolean? = null, // null = follow system, true = dark, false = light
-    val useDynamicColor: Boolean = true
+    val useDynamicColor: Boolean = true,
+    val useMomentumColorSpectrum: Boolean = true, // Red -> Purple -> Blue -> Yellow -> Green based on daily progress
+    val syncSystemColorsWithShizuku: Boolean = false // Sync Android System UI Material You seed color via Shizuku
 )

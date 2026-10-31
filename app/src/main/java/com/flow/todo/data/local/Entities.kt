@@ -3,6 +3,7 @@ package com.flow.todo.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.HealthGoalSpec
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.TaskItem
@@ -26,6 +27,7 @@ data class TaskEntity(
     val isFlagged: Boolean,
     val isCompleted: Boolean,
     val recurrenceRuleRaw: String? = null,
+    val healthGoalRaw: String? = null,
     val createdAt: Long,
     val completedAt: Long?
 )
@@ -54,6 +56,7 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     isFlagged = isFlagged,
     isCompleted = isCompleted,
     recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
+    healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
     createdAt = createdAt,
     completedAt = completedAt
 )
@@ -68,6 +71,7 @@ fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     isFlagged = isFlagged,
     isCompleted = isCompleted,
     recurrenceRuleRaw = recurrenceRule?.toStorageString(),
+    healthGoalRaw = healthGoal?.toStorageString(),
     createdAt = createdAt,
     completedAt = completedAt
 )
