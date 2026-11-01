@@ -208,6 +208,7 @@ fun TaskRow(
                 }
             )
         )
+        actions.add(
             FluidMenuAction(
                 label = "Move to Next Action",
                 icon = Icons.Rounded.PlayArrow,
@@ -215,7 +216,9 @@ fun TaskRow(
                     menuExpanded = false
                     onMoveBucket(GtdBucket.NEXT_ACTION)
                 }
-            ),
+            )
+        )
+        actions.add(
             FluidMenuAction(
                 label = "Move to Someday",
                 icon = Icons.Rounded.Lightbulb,
@@ -223,7 +226,9 @@ fun TaskRow(
                     menuExpanded = false
                     onMoveBucket(GtdBucket.SOMEDAY)
                 }
-            ),
+            )
+        )
+        actions.add(
             FluidMenuAction(
                 label = if (task.isFlagged) "Unmark Flag" else "Toggle Priority Flag",
                 icon = Icons.Rounded.Flag,
@@ -231,7 +236,9 @@ fun TaskRow(
                     menuExpanded = false
                     onToggleFlag()
                 }
-            ),
+            )
+        )
+        actions.add(
             FluidMenuAction(
                 label = "Delete Task",
                 icon = Icons.Rounded.DeleteOutline,
@@ -242,6 +249,7 @@ fun TaskRow(
                 }
             )
         )
+        actions
     }
 
     Box(
