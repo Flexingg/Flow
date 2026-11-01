@@ -5,6 +5,46 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val baseVersionMajor = 0
+val baseVersionMinor = 0
+
+// Auto-increment versionCode and versionName with every commit or build
+val gitCommitCount: Int by lazy {
+    runCatching {
+        val stdout = java.io.ByteArrayOutputStream()
+        project.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            standardOutput = stdout
+        }
+        stdout.toString().trim().toInt()
+    }.getOrElse {
+        System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 2
+    }
+}
+
+// Ensure versionCode strictly increments (> 1, since release v0.0.1 had versionCode 1)
+val appVersionCode: Int = (project.findProperty("versionCode") as? String)?.toIntOrNull()
+    ?: System.getenv("VERSION_CODE")?.toIntOrNull()
+    ?: gitCommitCount.coerceAtLeast(2)
+
+// Auto-bump versionName: 0.0.2, 0.0.3, ... or use tag/env if provided
+val appVersionName: String = (project.findProperty("versionName") as? String)
+    ?: System.getenv("VERSION_NAME")
+    ?: runCatching {
+        val tagOutput = java.io.ByteArrayOutputStream()
+        project.exec {
+            commandLine("git", "describe", "--tags", "--exact-match")
+            standardOutput = tagOutput
+            isIgnoreExitValue = true
+        }
+        val tag = tagOutput.toString().trim().removePrefix("v")
+        if (tag.isNotEmpty()) tag else null
+    }.getOrNull()
+    ?: run {
+        val patch = (gitCommitCount - 13).coerceAtLeast(1) + 1
+        "$baseVersionMajor.$baseVersionMinor.$patch"
+    }
+
 android {
     namespace = "com.flow.todo"
     compileSdk = 35
@@ -13,8 +53,8 @@ android {
         applicationId = "com.flow.todo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,6 +77,14 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+}
+
+tasks.register("printVersion") {
+    doLast {
+        println("versionCode=$appVersionCode")
+        println("versionName=$appVersionName")
     }
 }
 

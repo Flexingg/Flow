@@ -1538,7 +1538,28 @@ fun FluidSettingsSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(FluidSpacing.xl))
+                Spacer(modifier = Modifier.height(FluidSpacing.lg))
+
+                // App Version & Build info
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Flow v${com.flow.todo.BuildConfig.VERSION_NAME} (build ${com.flow.todo.BuildConfig.VERSION_CODE})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = FluidTheme.colors.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Living Flow GTD • In-Place Updates Enabled",
+                        fontSize = 11.sp,
+                        color = FluidTheme.colors.textTertiary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(FluidSpacing.md))
 
                 FluidPillButton(
                     text = "Done",
