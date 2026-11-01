@@ -66,6 +66,7 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Haze
     implementation(libs.haze)
@@ -74,4 +75,10 @@ dependencies {
     implementation(libs.androidx.health.connect)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+
+    // Firebase Auth, Cloud Firestore & Google Sign-In
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.play.services.auth)
 }

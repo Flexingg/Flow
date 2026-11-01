@@ -3,6 +3,7 @@ package com.flow.todo.ui.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
 import com.flow.todo.data.system.ShizukuSystemColorManager
@@ -10,7 +11,12 @@ import com.flow.todo.data.usage.AppUsageManager
 import com.flow.todo.domain.model.AccessibilityPreferences
 import com.flow.todo.domain.model.AppUsageMetricType
 import com.flow.todo.domain.model.AppUsageSnapshot
+import com.flow.todo.domain.model.CloudSyncState
+import com.flow.todo.domain.model.ContributionChartSummary
+import com.flow.todo.domain.model.ContributionDayCell
+import com.flow.todo.domain.model.DailyCompletionRecord
 import com.flow.todo.domain.model.EvaluatedGoal
+import com.flow.todo.domain.model.FirebaseCloudConfig
 import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.domain.model.GoalCategory
@@ -37,11 +43,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToLong
@@ -77,14 +85,17 @@ data class FlowUiState(
     val dailyProgress: Float = 0f,
     val healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
     val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
-    val lastSyncedSystemColorHex: String? = null
+    val lastSyncedSystemColorHex: String? = null,
+    val cloudSyncState: CloudSyncState = CloudSyncState(),
+    val contributionChart: ContributionChartSummary = ContributionChartSummary()
 )
 
 class FlowViewModel(
     private val repository: FlowRepository,
     private val healthConnectManager: HealthConnectManager? = null,
     private val shizukuManager: ShizukuSystemColorManager? = null,
-    private val appUsageManager: AppUsageManager? = null
+    private val appUsageManager: AppUsageManager? = null,
+    private val firestoreSyncManager: FirestoreSyncManager? = null
 ) : ViewModel() {
 
     private data class LocalUiFlags(
@@ -99,6 +110,7 @@ class FlowViewModel(
         val tasks: List<TaskItem>,
         val projects: List<Project>,
         val goals: List<FlowGoal>,
+        val dailyHistory: List<DailyCompletionRecord>,
         val appUsage: AppUsageSnapshot
     )
 
@@ -106,6 +118,13 @@ class FlowViewModel(
         val healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
         val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
         val lastAppliedHex: String? = null
+    )
+
+    private data class DailyRecordSnapshot(
+        val completedTasks: Int,
+        val completedGoals: Int,
+        val totalGoals: Int,
+        val momentum: Float
     )
 
     private val _localFlags = MutableStateFlow(LocalUiFlags())
@@ -123,16 +142,21 @@ class FlowViewModel(
     private val appUsageSnapshotFlow: Flow<AppUsageSnapshot> =
         appUsageManager?.snapshot ?: MutableStateFlow(AppUsageSnapshot())
 
+    private val cloudSyncFlow: Flow<CloudSyncState> =
+        firestoreSyncManager?.state ?: MutableStateFlow(CloudSyncState())
+
     private val domainDataFlow: Flow<RepositoryDomainData> = combine(
         repository.observeTasks(),
         repository.observeProjects(),
         repository.observeGoals(),
+        repository.observeDailyHistory(),
         appUsageSnapshotFlow
-    ) { tasks, projects, goals, usage ->
+    ) { tasks, projects, goals, history, usage ->
         RepositoryDomainData(
             tasks = tasks,
             projects = projects,
             goals = goals,
+            dailyHistory = history,
             appUsage = usage
         )
     }
@@ -153,8 +177,9 @@ class FlowViewModel(
         _localFlags,
         domainDataFlow,
         repository.accessibilityPreferences,
-        systemHealthFlow
-    ) { flags, domainData, accessibility, sysHealth ->
+        systemHealthFlow,
+        cloudSyncFlow
+    ) { flags, domainData, accessibility, sysHealth, cloudSync ->
         val today = LocalDate.now()
         val todayEpochDay = today.toEpochDay()
         val nextWeekEndEpochDay = today.plusDays(7).toEpochDay()
@@ -282,6 +307,16 @@ class FlowViewModel(
             fallbackTaskProgress
         }
 
+        val contributionChart = buildContributionChart(
+            allTasks = tasks,
+            dailyHistory = domainData.dailyHistory,
+            todayEpochDay = todayEpochDay,
+            completedTodayTasks = completedTodayCount,
+            completedTodayGoals = completedGoalsCount,
+            totalTodayGoals = totalGoalsCount,
+            todayMomentum = effectiveDailyProgress
+        )
+
         FlowUiState(
             selectedTab = flags.selectedTab,
             allTasks = tasks,
@@ -310,7 +345,9 @@ class FlowViewModel(
             dailyProgress = effectiveDailyProgress,
             healthSnapshot = sysHealth.healthSnapshot,
             shizukuStatus = sysHealth.shizukuStatus,
-            lastSyncedSystemColorHex = sysHealth.lastAppliedHex
+            lastSyncedSystemColorHex = sysHealth.lastAppliedHex,
+            cloudSyncState = cloudSync,
+            contributionChart = contributionChart
         )
     }.stateIn(
         scope = viewModelScope,
@@ -348,6 +385,32 @@ class FlowViewModel(
                             toggleTaskCompletion(task.id)
                         }
                     }
+                }
+        }
+
+        viewModelScope.launch {
+            uiState
+                .map {
+                    DailyRecordSnapshot(
+                        completedTasks = it.completedTodayCount,
+                        completedGoals = it.completedGoalsCount,
+                        totalGoals = it.totalGoalsCount,
+                        momentum = it.goalMomentumProgress
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { snap ->
+                    val todayEpochDay = LocalDate.now().toEpochDay()
+                    val record = DailyCompletionRecord(
+                        epochDay = todayEpochDay,
+                        tasksCompletedCount = snap.completedTasks,
+                        goalsCompletedCount = snap.completedGoals,
+                        totalGoalsCount = snap.totalGoals,
+                        momentumScore = snap.momentum,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    repository.upsertDailyHistory(record)
+                    firestoreSyncManager?.pushDailyHistory(record)
                 }
         }
     }
@@ -443,7 +506,6 @@ class FlowViewModel(
                     isCompleted = currentValue <= goal.targetValue
                     isOverLimit = currentValue > goal.targetValue
                     barFillFraction = usageRatio.coerceIn(0f, 1f)
-                    // For AT_MOST goals, staying under the limit contributes positively to Goal Momentum
                     momentumContribution = if (currentValue <= goal.targetValue) {
                         (1f - (usageRatio * 0.25f)).coerceIn(0.75f, 1f)
                     } else {
@@ -479,6 +541,165 @@ class FlowViewModel(
             else ->
                 String.format(Locale.US, "%,d", value.roundToLong())
         }
+    }
+
+    private fun buildContributionChart(
+        allTasks: List<TaskItem>,
+        dailyHistory: List<DailyCompletionRecord>,
+        todayEpochDay: Long,
+        completedTodayTasks: Int,
+        completedTodayGoals: Int,
+        totalTodayGoals: Int,
+        todayMomentum: Float
+    ): ContributionChartSummary {
+        val today = LocalDate.ofEpochDay(todayEpochDay)
+        val thisMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val startMonday = thisMonday.minusWeeks(51)
+
+        val completedTasksByDay = mutableMapOf<Long, Int>()
+        allTasks.filter { it.isCompleted }.forEach { task ->
+            val epochDay = if (task.completedAt != null) {
+                runCatching {
+                    Instant.ofEpochMilli(task.completedAt)
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                        .toEpochDay()
+                }.getOrNull() ?: task.dueDateEpochDay
+            } else {
+                task.dueDateEpochDay
+            }
+            if (epochDay != null) {
+                completedTasksByDay[epochDay] = (completedTasksByDay[epochDay] ?: 0) + 1
+            }
+        }
+
+        val historyByDay = dailyHistory.associateBy { it.epochDay }
+        val totalDays = 52 * 7
+        val cells = ArrayList<ContributionDayCell>(totalDays)
+        val fullDateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
+
+        for (i in 0 until totalDays) {
+            val date = startMonday.plusDays(i.toLong())
+            val epochDay = date.toEpochDay()
+            val isToday = epochDay == todayEpochDay
+            val isFuture = epochDay > todayEpochDay
+            val dayOfWeekIndex = date.dayOfWeek.value - 1 // 0=Mon .. 6=Sun
+
+            val historyRecord = historyByDay[epochDay]
+            val tasksFromList = completedTasksByDay[epochDay] ?: 0
+            val tasksCount = if (isToday) {
+                maxOf(tasksFromList, historyRecord?.tasksCompletedCount ?: 0, completedTodayTasks)
+            } else {
+                maxOf(tasksFromList, historyRecord?.tasksCompletedCount ?: 0)
+            }
+
+            val goalsCompleted = if (isToday) {
+                maxOf(completedTodayGoals, historyRecord?.goalsCompletedCount ?: 0)
+            } else {
+                historyRecord?.goalsCompletedCount ?: 0
+            }
+
+            val totalGoals = if (isToday) {
+                if (totalTodayGoals > 0) totalTodayGoals else (historyRecord?.totalGoalsCount ?: 0)
+            } else {
+                historyRecord?.totalGoalsCount ?: 0
+            }
+
+            val momentumScore = if (isToday) {
+                if (todayMomentum > 0f) todayMomentum else (historyRecord?.momentumScore ?: 0f)
+            } else {
+                historyRecord?.momentumScore ?: 0f
+            }
+
+            // taskLevel: 0 when 0 tasks, 1 when 1 task, 2 when 2 tasks, 3 when 3–4 tasks, 4 when >= 5 tasks
+            val taskLevel = when {
+                tasksCount <= 0 -> 0
+                tasksCount == 1 -> 1
+                tasksCount == 2 -> 2
+                tasksCount in 3..4 -> 3
+                else -> 4
+            }
+
+            // goalLevel: 0 when 0 goals met and momentum < 0.1f, 1 when momentum < 0.35f, 2 when momentum < 0.65f, 3 when momentum < 0.90f, 4 when momentum >= 0.90f or all goals met (goalsCompleted >= totalGoals && totalGoals > 0)
+            val allGoalsMet = goalsCompleted >= totalGoals && totalGoals > 0
+            val goalLevel = when {
+                allGoalsMet || momentumScore >= 0.90f -> 4
+                momentumScore >= 0.65f -> 3
+                momentumScore >= 0.35f -> 2
+                momentumScore >= 0.10f || goalsCompleted > 0 -> 1
+                else -> 0
+            }
+
+            // combinedLevel: maxOf(taskLevel, goalLevel) (or ((taskLevel + goalLevel + 1) / 2).coerceIn(1, 4) when either > 0)
+            val combinedLevel = if (isFuture) {
+                0
+            } else if (taskLevel == 0 && goalLevel == 0) {
+                0
+            } else {
+                ((taskLevel + goalLevel + 1) / 2).coerceIn(1, 4)
+            }
+
+            val cell = ContributionDayCell(
+                epochDay = epochDay,
+                dateLabel = date.format(fullDateFormatter),
+                dayOfWeekIndex = dayOfWeekIndex,
+                isToday = isToday,
+                isFuture = isFuture,
+                tasksCompleted = if (isFuture) 0 else tasksCount,
+                goalsCompleted = if (isFuture) 0 else goalsCompleted,
+                totalGoals = if (isFuture) 0 else totalGoals,
+                momentumScore = if (isFuture) 0f else momentumScore,
+                combinedLevel = combinedLevel,
+                taskLevel = if (isFuture) 0 else taskLevel,
+                goalLevel = if (isFuture) 0 else goalLevel
+            )
+            cells.add(cell)
+        }
+
+        val weeks = cells.chunked(7)
+        val pastAndTodayCells = cells.filter { !it.isFuture }
+        val todayCell = pastAndTodayCells.find { it.isToday }
+
+        var currentStreak = 0
+        val startIndex = if (todayCell != null && todayCell.combinedLevel > 0) {
+            pastAndTodayCells.indexOf(todayCell)
+        } else if (todayCell != null) {
+            pastAndTodayCells.indexOf(todayCell) - 1
+        } else {
+            pastAndTodayCells.size - 1
+        }
+
+        for (idx in startIndex downTo 0) {
+            if (pastAndTodayCells[idx].combinedLevel > 0) {
+                currentStreak++
+            } else {
+                break
+            }
+        }
+
+        var longestStreak = 0
+        var tempStreak = 0
+        for (cell in pastAndTodayCells) {
+            if (cell.combinedLevel > 0) {
+                tempStreak++
+                if (tempStreak > longestStreak) {
+                    longestStreak = tempStreak
+                }
+            } else {
+                tempStreak = 0
+            }
+        }
+        longestStreak = maxOf(longestStreak, currentStreak)
+
+        return ContributionChartSummary(
+            cells = cells,
+            weeks = weeks,
+            currentStreakDays = currentStreak,
+            longestStreakDays = longestStreak,
+            totalTasksCompletedInWindow = pastAndTodayCells.sumOf { it.tasksCompleted },
+            totalGoalsMetInWindow = pastAndTodayCells.sumOf { it.goalsCompleted },
+            activeDaysCount = pastAndTodayCells.count { it.combinedLevel > 0 }
+        )
     }
 
     fun selectTab(tab: FlowTab) {
@@ -526,6 +747,7 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertGoal(newGoal)
+            firestoreSyncManager?.pushGoal(newGoal)
         }
     }
 
@@ -544,6 +766,7 @@ class FlowViewModel(
     fun deleteGoal(goalId: String) {
         viewModelScope.launch {
             repository.deleteGoal(goalId)
+            firestoreSyncManager?.deleteRemoteGoal(goalId)
         }
     }
 
@@ -586,6 +809,7 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertTask(newTask)
+            firestoreSyncManager?.pushTask(newTask)
         }
     }
 
@@ -676,12 +900,15 @@ class FlowViewModel(
                     completedAt = null
                 )
                 repository.upsertTasks(listOf(completedOccurrence, nextOccurrence))
+                firestoreSyncManager?.pushTask(completedOccurrence)
+                firestoreSyncManager?.pushTask(nextOccurrence)
             } else {
                 val updatedTask = task.copy(
                     isCompleted = nowCompleted,
                     completedAt = if (nowCompleted) nowMillis else null
                 )
                 repository.upsertTask(updatedTask)
+                firestoreSyncManager?.pushTask(updatedTask)
             }
         }
     }
@@ -691,6 +918,7 @@ class FlowViewModel(
         val updatedTask = task.copy(isFlagged = !task.isFlagged)
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
@@ -709,6 +937,7 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
@@ -725,6 +954,7 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
@@ -748,6 +978,7 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
@@ -756,12 +987,14 @@ class FlowViewModel(
         val updatedTask = task.copy(projectId = projectId)
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
     fun deleteTask(taskId: String) {
         viewModelScope.launch {
             repository.deleteTask(taskId)
+            firestoreSyncManager?.deleteRemoteTask(taskId)
         }
     }
 
@@ -775,22 +1008,54 @@ class FlowViewModel(
         )
         viewModelScope.launch {
             repository.upsertProject(newProject)
+            firestoreSyncManager?.pushProject(newProject)
         }
     }
 
     fun deleteProject(projectId: String) {
         viewModelScope.launch {
             repository.deleteProject(projectId)
+            firestoreSyncManager?.deleteRemoteProject(projectId)
         }
     }
 
     fun updateAccessibility(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {
         viewModelScope.launch {
             repository.updateAccessibilityPreferences(transform)
-            if (repository.accessibilityPreferences.value.syncSystemColorsWithShizuku) {
+            val updated = repository.accessibilityPreferences.value
+            firestoreSyncManager?.pushPreferences(updated)
+            if (updated.syncSystemColorsWithShizuku) {
                 shizukuManager?.applyMomentumColorForProgress(uiState.value.dailyProgress, force = true)
             }
         }
+    }
+
+    fun getGoogleSignInIntent(): android.content.Intent? = firestoreSyncManager?.getGoogleSignInIntent()
+
+    fun onGoogleSignInResult(data: android.content.Intent?) {
+        viewModelScope.launch {
+            firestoreSyncManager?.handleGoogleSignInResult(data)
+        }
+    }
+
+    fun signInWithEmail(email: String, password: String, isSignUp: Boolean) {
+        viewModelScope.launch {
+            firestoreSyncManager?.signInWithEmail(email, password, isSignUp)
+        }
+    }
+
+    fun signOutCloud() {
+        firestoreSyncManager?.signOut()
+    }
+
+    fun syncWithCloudNow() {
+        viewModelScope.launch {
+            firestoreSyncManager?.syncAllNow()
+        }
+    }
+
+    fun updateFirebaseConfig(config: FirebaseCloudConfig) {
+        firestoreSyncManager?.updateFirebaseConfig(config)
     }
 
     private fun isCompletedToday(completedAt: Long?, todayEpochDay: Long): Boolean {
@@ -810,13 +1075,20 @@ class FlowViewModel(
             repository: FlowRepository,
             healthConnectManager: HealthConnectManager? = null,
             shizukuManager: ShizukuSystemColorManager? = null,
-            appUsageManager: AppUsageManager? = null
+            appUsageManager: AppUsageManager? = null,
+            firestoreSyncManager: FirestoreSyncManager? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(FlowViewModel::class.java)) {
-                        return FlowViewModel(repository, healthConnectManager, shizukuManager, appUsageManager) as T
+                        return FlowViewModel(
+                            repository = repository,
+                            healthConnectManager = healthConnectManager,
+                            shizukuManager = shizukuManager,
+                            appUsageManager = appUsageManager,
+                            firestoreSyncManager = firestoreSyncManager
+                        ) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
                 }

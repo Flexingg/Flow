@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.AppUsageMetricType
 import com.flow.todo.domain.model.AppUsageSnapshot
+import com.flow.todo.domain.model.ContributionChartSummary
 import com.flow.todo.domain.model.EvaluatedGoal
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
@@ -73,6 +74,7 @@ import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.ShizukuStatus
+import com.flow.todo.ui.components.FluidContributionChart
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidGoalMeterCard
@@ -111,6 +113,7 @@ fun GoalsScreen(
     appUsageSnapshot: AppUsageSnapshot,
     shizukuStatus: ShizukuStatus,
     syncSystemColorsWithShizuku: Boolean,
+    contributionChart: ContributionChartSummary = ContributionChartSummary(),
     onOpenGoalCreator: () -> Unit,
     onDeleteGoal: (String) -> Unit,
     onAddPresetGoal: (
@@ -463,6 +466,15 @@ fun GoalsScreen(
                     )
                 }
             }
+        }
+
+        // CONTRIBUTION HEATMAP CHART
+        item {
+            Spacer(modifier = Modifier.height(FluidSpacing.md))
+            FluidContributionChart(
+                summary = contributionChart,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         // 2. CATEGORY FILTER CHIPS

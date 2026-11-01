@@ -3,6 +3,7 @@ package com.flow.todo.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.flow.todo.domain.model.AppUsageMetricType
+import com.flow.todo.domain.model.DailyCompletionRecord
 import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
@@ -52,6 +53,16 @@ data class GoalEntity(
     val targetAppName: String? = null,
     val appUsageMetricName: String? = null,
     val createdAt: Long
+)
+
+@Entity(tableName = "daily_history")
+data class DailyHistoryEntity(
+    @PrimaryKey val epochDay: Long,
+    val tasksCompletedCount: Int,
+    val goalsCompletedCount: Int,
+    val totalGoalsCount: Int,
+    val momentumScore: Float,
+    val updatedAt: Long
 )
 
 fun ProjectEntity.toDomain(): Project = Project(
@@ -126,4 +137,22 @@ fun FlowGoal.toEntity(): GoalEntity = GoalEntity(
     targetAppName = targetAppName,
     appUsageMetricName = appUsageMetric?.name,
     createdAt = createdAt
+)
+
+fun DailyHistoryEntity.toDomain(): DailyCompletionRecord = DailyCompletionRecord(
+    epochDay = epochDay,
+    tasksCompletedCount = tasksCompletedCount,
+    goalsCompletedCount = goalsCompletedCount,
+    totalGoalsCount = totalGoalsCount,
+    momentumScore = momentumScore,
+    updatedAt = updatedAt
+)
+
+fun DailyCompletionRecord.toEntity(): DailyHistoryEntity = DailyHistoryEntity(
+    epochDay = epochDay,
+    tasksCompletedCount = tasksCompletedCount,
+    goalsCompletedCount = goalsCompletedCount,
+    totalGoalsCount = totalGoalsCount,
+    momentumScore = momentumScore,
+    updatedAt = updatedAt
 )

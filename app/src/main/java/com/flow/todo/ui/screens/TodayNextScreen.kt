@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flow.todo.domain.model.ContributionChartSummary
 import com.flow.todo.domain.model.EvaluatedGoal
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
@@ -73,6 +74,7 @@ import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import com.flow.todo.ui.components.FluidContributionChart
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidGoalSpectrumBar
@@ -102,6 +104,7 @@ fun TodayNextScreen(
     healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
     shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
     syncSystemColorsWithShizuku: Boolean = false,
+    contributionChart: ContributionChartSummary = ContributionChartSummary(),
     onRequestHealthPermissions: () -> Unit = {},
     onRefreshHealthStats: () -> Unit = {},
     onAddQuickHealthGoal: (HealthMetricType, Double) -> Unit = { _, _ -> },
@@ -540,6 +543,12 @@ fun TodayNextScreen(
                             syncSystemColors = syncSystemColorsWithShizuku,
                             onOpenGoalsTab = onOpenGoalsTab,
                             onOpenGoalCreator = onOpenGoalCreator,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Contribution Heatmap Chart
+                        FluidContributionChart(
+                            summary = contributionChart,
                             modifier = Modifier.fillMaxWidth()
                         )
 

@@ -8,11 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.local.FlowDatabase
 import com.flow.todo.data.repository.FlowRepository
@@ -26,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: FlowViewModel
     private lateinit var shizukuManager: ShizukuSystemColorManager
+    private lateinit var firestoreSyncManager: FirestoreSyncManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +39,7 @@ class MainActivity : ComponentActivity() {
         val healthConnectManager = HealthConnectManager(applicationContext)
         shizukuManager = ShizukuSystemColorManager(applicationContext)
         val appUsageManager = AppUsageManager(applicationContext)
+        firestoreSyncManager = FirestoreSyncManager(applicationContext, repository)
 
         viewModel = ViewModelProvider(
             this,
@@ -43,7 +47,8 @@ class MainActivity : ComponentActivity() {
                 repository = repository,
                 healthConnectManager = healthConnectManager,
                 shizukuManager = shizukuManager,
-                appUsageManager = appUsageManager
+                appUsageManager = appUsageManager,
+                firestoreSyncManager = firestoreSyncManager
             )
         )[FlowViewModel::class.java]
 
@@ -54,6 +59,12 @@ class MainActivity : ComponentActivity() {
                 contract = PermissionController.createRequestPermissionResultContract()
             ) {
                 viewModel.refreshHealthAndSystemStatus()
+            }
+
+            val googleSignInLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                viewModel.onGoogleSignInResult(result.data)
             }
 
             val requestHealthPermissions: () -> Unit = {
@@ -96,6 +107,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val requestGoogleSignIn: () -> Unit = {
+                runCatching {
+                    viewModel.getGoogleSignInIntent()?.let { signInIntent ->
+                        googleSignInLauncher.launch(signInIntent)
+                    }
+                }
+            }
+
             FluidTheme(
                 preferences = uiState.accessibility,
                 dailyProgress = uiState.dailyProgress
@@ -103,7 +122,8 @@ class MainActivity : ComponentActivity() {
                 FlowAppShell(
                     viewModel = viewModel,
                     onRequestHealthPermissions = requestHealthPermissions,
-                    onRequestUsagePermission = requestUsagePermission
+                    onRequestUsagePermission = requestUsagePermission,
+                    onSignInWithGoogle = requestGoogleSignIn
                 )
             }
         }
@@ -120,6 +140,9 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         if (::shizukuManager.isInitialized) {
             shizukuManager.destroy()
+        }
+        if (::firestoreSyncManager.isInitialized) {
+            firestoreSyncManager.destroy()
         }
     }
 }

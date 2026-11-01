@@ -68,6 +68,20 @@ class FlowRepository(
         entities.map { it.toDomain() }
     }
 
+    fun observeDailyHistory(): Flow<List<com.flow.todo.domain.model.DailyCompletionRecord>> =
+        dao.observeDailyHistory().map { entities ->
+            entities.map { it.toDomain() }
+        }
+
+    suspend fun getAllTasks(): List<TaskItem> = dao.getAllTasks().map { it.toDomain() }
+
+    suspend fun getAllProjects(): List<Project> = dao.getAllProjects().map { it.toDomain() }
+
+    suspend fun getAllGoals(): List<FlowGoal> = dao.getAllGoals().map { it.toDomain() }
+
+    suspend fun getAllDailyHistory(): List<com.flow.todo.domain.model.DailyCompletionRecord> =
+        dao.getAllDailyHistory().map { it.toDomain() }
+
     suspend fun upsertTask(task: TaskItem) {
         dao.upsertTask(task.toEntity())
     }
@@ -98,8 +112,20 @@ class FlowRepository(
         dao.upsertGoal(goal.toEntity())
     }
 
+    suspend fun upsertGoals(goals: List<FlowGoal>) {
+        dao.upsertGoals(goals.map { it.toEntity() })
+    }
+
     suspend fun deleteGoal(goalId: String) {
         dao.deleteGoal(goalId)
+    }
+
+    suspend fun upsertDailyHistory(record: com.flow.todo.domain.model.DailyCompletionRecord) {
+        dao.upsertDailyHistory(record.toEntity())
+    }
+
+    suspend fun upsertDailyHistoryList(records: List<com.flow.todo.domain.model.DailyCompletionRecord>) {
+        dao.upsertDailyHistoryList(records.map { it.toEntity() })
     }
 
     suspend fun updateAccessibilityPreferences(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {

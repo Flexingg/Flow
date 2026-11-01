@@ -1,7 +1,12 @@
 package com.flow.todo.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,8 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
@@ -53,10 +60,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.AccessibilityPreferences
+import com.flow.todo.domain.model.CloudSyncState
+import com.flow.todo.domain.model.CloudSyncStatus
 import com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
+import com.flow.todo.domain.model.FirebaseCloudConfig
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.MOMENTUM_COLOR_SWATCHES
 import com.flow.todo.domain.model.MOMENTUM_PALETTE_PRESETS
@@ -88,7 +99,13 @@ fun FluidSettingsSheet(
     onSyncSystemColorsNow: () -> Unit = {},
     onRestoreSystemPalette: () -> Unit = {},
     onRequestHealthPermissions: () -> Unit = {},
-    onRefreshHealthStats: () -> Unit = {}
+    onRefreshHealthStats: () -> Unit = {},
+    cloudSyncState: CloudSyncState = CloudSyncState(),
+    onSignInWithGoogle: () -> Unit = {},
+    onSignInWithEmail: (email: String, password: String, isSignUp: Boolean) -> Unit = { _, _, _ -> },
+    onSignOutCloud: () -> Unit = {},
+    onSyncCloudNow: () -> Unit = {},
+    onSaveFirebaseConfig: (FirebaseCloudConfig) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isReducedMotion = FluidTheme.isReducedMotion
@@ -98,6 +115,24 @@ fun FluidSettingsSheet(
     var selectedStageIndex by remember { mutableStateOf(0) }
     var customHexInput by remember(selectedStageIndex, currentStopHexes[selectedStageIndex]) {
         mutableStateOf(String.format(java.util.Locale.US, "#%06X", currentStopHexes[selectedStageIndex] and 0xFFFFFFL))
+    }
+
+    var showEmailAuth by remember { mutableStateOf(false) }
+    var emailInput by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
+
+    var showFirebaseConfig by remember { mutableStateOf(false) }
+    var projectIdInput by remember(cloudSyncState.customConfig.projectId) {
+        mutableStateOf(cloudSyncState.customConfig.projectId)
+    }
+    var appIdInput by remember(cloudSyncState.customConfig.applicationId) {
+        mutableStateOf(cloudSyncState.customConfig.applicationId)
+    }
+    var apiKeyInput by remember(cloudSyncState.customConfig.apiKey) {
+        mutableStateOf(cloudSyncState.customConfig.apiKey)
+    }
+    var webClientIdInput by remember(cloudSyncState.customConfig.webClientId) {
+        mutableStateOf(cloudSyncState.customConfig.webClientId)
     }
 
     // Bouncy entrance animation for sheet container
@@ -877,6 +912,540 @@ fun FluidSettingsSheet(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(FluidSpacing.lg))
+
+                // Google Account & Cloud Firestore Sync Section
+                Text(
+                    text = "GOOGLE ACCOUNT & CLOUD FIRESTORE SYNC",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = FluidTheme.colors.textTertiary,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                FluidInsetCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    accentGlowColor = if (cloudSyncState.isSignedIn) FluidTheme.colors.accent.copy(alpha = 0.25f) else null
+                ) {
+                    val statusColor = when (cloudSyncState.status) {
+                        CloudSyncStatus.SYNCED -> FluidTheme.colors.success
+                        CloudSyncStatus.SYNCING, CloudSyncStatus.SIGNING_IN -> FluidTheme.colors.accent
+                        CloudSyncStatus.ERROR -> FluidTheme.colors.danger
+                        CloudSyncStatus.SIGNED_OUT, CloudSyncStatus.NOT_CONFIGURED -> FluidTheme.colors.textTertiary
+                    }
+
+                    // Header Row with Cloud icon, title, and status pill
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CloudSync,
+                                    contentDescription = null,
+                                    tint = FluidTheme.colors.accent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Google Account & Firestore Sync",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = FluidTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = "Real-time bi-directional cloud backup",
+                                    fontSize = 11.sp,
+                                    color = FluidTheme.colors.textTertiary
+                                )
+                            }
+                        }
+
+                        // Status pill chip
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(statusColor.copy(alpha = 0.12f))
+                                .border(1.dp, statusColor.copy(alpha = 0.28f), FluidShapes.full)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = cloudSyncState.status.label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = statusColor
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                    // Status Message Banner
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fluidGlass(GlassLevel.THIN, FluidShapes.md)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor)
+                            )
+                            Text(
+                                text = cloudSyncState.statusMessage,
+                                fontSize = 12.sp,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // State 1: When user is NOT signed in
+                    if (!cloudSyncState.isSignedIn) {
+                        FluidPillButton(
+                            text = "Sign in with Google Account",
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSignInWithGoogle()
+                            },
+                            isPrimary = true,
+                            leadingIcon = Icons.Rounded.AccountCircle,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                        // Expandable "Or Sign in with Email & Password"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "EMAIL & PASSWORD AUTH",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = FluidTheme.colors.textTertiary
+                            )
+
+                            FluidFilterChip(
+                                label = if (showEmailAuth) "Hide Email Form" else "Or Sign in with Email",
+                                selected = showEmailAuth,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showEmailAuth = !showEmailAuth
+                                }
+                            )
+                        }
+
+                        this@Column.AnimatedVisibility(
+                            visible = showEmailAuth,
+                            enter = fadeIn(FluidSprings.morph(isReducedMotion)) + expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
+                            exit = fadeOut(FluidSprings.morph(isReducedMotion)) + shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = FluidSpacing.sm),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Email field
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(42.dp)
+                                        .clip(FluidShapes.sm)
+                                        .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                        .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (emailInput.isEmpty()) {
+                                        Text(
+                                            text = "Enter email address",
+                                            fontSize = 13.sp,
+                                            color = FluidTheme.colors.textTertiary
+                                        )
+                                    }
+                                    BasicTextField(
+                                        value = emailInput,
+                                        onValueChange = { emailInput = it },
+                                        textStyle = TextStyle(
+                                            color = FluidTheme.colors.textPrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                // Password field
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(42.dp)
+                                        .clip(FluidShapes.sm)
+                                        .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                        .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (passwordInput.isEmpty()) {
+                                        Text(
+                                            text = "Enter password",
+                                            fontSize = 13.sp,
+                                            color = FluidTheme.colors.textTertiary
+                                        )
+                                    }
+                                    BasicTextField(
+                                        value = passwordInput,
+                                        onValueChange = { passwordInput = it },
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        textStyle = TextStyle(
+                                            color = FluidTheme.colors.textPrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FluidPillButton(
+                                        text = "Sign In",
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onSignInWithEmail(emailInput.trim(), passwordInput, false)
+                                        },
+                                        isPrimary = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FluidPillButton(
+                                        text = "Create Account",
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onSignInWithEmail(emailInput.trim(), passwordInput, true)
+                                        },
+                                        isPrimary = false,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // State 2: When user IS signed in
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fluidGlass(GlassLevel.THIN, FluidShapes.md)
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(FluidTheme.colors.accent.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.AccountCircle,
+                                        contentDescription = null,
+                                        tint = FluidTheme.colors.accent,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = cloudSyncState.userDisplayName ?: "Flow User",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = FluidTheme.colors.textPrimary
+                                    )
+                                    Text(
+                                        text = cloudSyncState.userEmail ?: (cloudSyncState.userUid ?: "Signed in"),
+                                        fontSize = 12.sp,
+                                        color = FluidTheme.colors.textSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FluidPillButton(
+                                text = "Sync Now",
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSyncCloudNow()
+                                },
+                                isPrimary = true,
+                                leadingIcon = Icons.Rounded.CloudSync,
+                                modifier = Modifier.weight(1f)
+                            )
+                            FluidPillButton(
+                                text = "Sign Out",
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onSignOutCloud()
+                                },
+                                isPrimary = false,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = FluidTheme.colors.divider,
+                        modifier = Modifier.padding(vertical = FluidSpacing.md)
+                    )
+
+                    // Expandable "Firebase Cloud Project Config" section
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = FluidSpacing.sm)) {
+                            Text(
+                                text = "Firebase Cloud Project Config",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FluidTheme.colors.textPrimary
+                            )
+                            Text(
+                                text = if (cloudSyncState.customConfig.isConfigured || cloudSyncState.isFirebaseReady) {
+                                    "Connected: ${cloudSyncState.customConfig.projectId.ifBlank { "Default Project" }}"
+                                } else {
+                                    "Optional custom Firestore project keys"
+                                },
+                                fontSize = 11.sp,
+                                color = FluidTheme.colors.textTertiary
+                            )
+                        }
+
+                        FluidFilterChip(
+                            label = if (showFirebaseConfig) "Hide Config" else "Configure Project ⚙️",
+                            selected = showFirebaseConfig,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showFirebaseConfig = !showFirebaseConfig
+                            }
+                        )
+                    }
+
+                    this@Column.AnimatedVisibility(
+                        visible = showFirebaseConfig,
+                        enter = fadeIn(FluidSprings.morph(isReducedMotion)) + expandVertically(animationSpec = FluidSprings.morph(isReducedMotion)),
+                        exit = fadeOut(FluidSprings.morph(isReducedMotion)) + shrinkVertically(animationSpec = FluidSprings.morph(isReducedMotion))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = FluidSpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Connect any Firebase project dynamically without rebuilding:",
+                                fontSize = 12.sp,
+                                color = FluidTheme.colors.textSecondary
+                            )
+
+                            // Project ID
+                            Text(
+                                text = "Project ID",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(FluidShapes.sm)
+                                    .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                    .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (projectIdInput.isEmpty()) {
+                                    Text("e.g. my-flow-gtd-app", fontSize = 12.sp, color = FluidTheme.colors.textTertiary)
+                                }
+                                BasicTextField(
+                                    value = projectIdInput,
+                                    onValueChange = { projectIdInput = it },
+                                    textStyle = TextStyle(
+                                        color = FluidTheme.colors.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // Application ID (App ID)
+                            Text(
+                                text = "Application ID (App ID)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(FluidShapes.sm)
+                                    .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                    .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (appIdInput.isEmpty()) {
+                                    Text("e.g. 1:123456789:android:abcdef", fontSize = 12.sp, color = FluidTheme.colors.textTertiary)
+                                }
+                                BasicTextField(
+                                    value = appIdInput,
+                                    onValueChange = { appIdInput = it },
+                                    textStyle = TextStyle(
+                                        color = FluidTheme.colors.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // Web API Key
+                            Text(
+                                text = "Web API Key",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(FluidShapes.sm)
+                                    .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                    .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (apiKeyInput.isEmpty()) {
+                                    Text("e.g. AIzaSy...", fontSize = 12.sp, color = FluidTheme.colors.textTertiary)
+                                }
+                                BasicTextField(
+                                    value = apiKeyInput,
+                                    onValueChange = { apiKeyInput = it },
+                                    textStyle = TextStyle(
+                                        color = FluidTheme.colors.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // Google Web Client ID (OAuth 2.0)
+                            Text(
+                                text = "Google Web Client ID (OAuth 2.0, Optional)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = FluidTheme.colors.textSecondary
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(FluidShapes.sm)
+                                    .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                    .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (webClientIdInput.isEmpty()) {
+                                    Text("e.g. 123456789-xyz.apps.googleusercontent.com", fontSize = 12.sp, color = FluidTheme.colors.textTertiary)
+                                }
+                                BasicTextField(
+                                    value = webClientIdInput,
+                                    onValueChange = { webClientIdInput = it },
+                                    textStyle = TextStyle(
+                                        color = FluidTheme.colors.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                            FluidPillButton(
+                                text = "Save & Connect Firestore",
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onSaveFirebaseConfig(
+                                        FirebaseCloudConfig(
+                                            projectId = projectIdInput.trim(),
+                                            applicationId = appIdInput.trim(),
+                                            apiKey = apiKeyInput.trim(),
+                                            webClientId = webClientIdInput.trim()
+                                        )
+                                    )
+                                },
+                                isPrimary = true,
+                                leadingIcon = Icons.Rounded.CloudSync,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(FluidSpacing.lg))
 
                 // Appearance Theme Section
                 Text(

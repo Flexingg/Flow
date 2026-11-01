@@ -498,3 +498,71 @@ data class AccessibilityPreferences(
     val syncSystemColorsWithShizuku: Boolean = false, // Sync Android System UI Material You seed color via Shizuku
     val momentumStopHexes: List<Long> = DEFAULT_MOMENTUM_STOPS_HEX
 )
+
+enum class CloudSyncStatus(val label: String) {
+    NOT_CONFIGURED("Cloud Config Needed"),
+    SIGNED_OUT("Signed Out"),
+    SIGNING_IN("Signing In..."),
+    SYNCING("Syncing with Firestore..."),
+    SYNCED("Synced with Cloud"),
+    ERROR("Sync Error")
+}
+
+data class FirebaseCloudConfig(
+    val projectId: String = "",
+    val applicationId: String = "",
+    val apiKey: String = "",
+    val webClientId: String = ""
+) {
+    val isConfigured: Boolean
+        get() = projectId.isNotBlank() && applicationId.isNotBlank() && apiKey.isNotBlank()
+}
+
+data class CloudSyncState(
+    val status: CloudSyncStatus = CloudSyncStatus.SIGNED_OUT,
+    val userUid: String? = null,
+    val userEmail: String? = null,
+    val userDisplayName: String? = null,
+    val isGoogleAccount: Boolean = false,
+    val lastSyncedMillis: Long = 0L,
+    val statusMessage: String = "Sign in with Google to sync tasks & goals across devices",
+    val customConfig: FirebaseCloudConfig = FirebaseCloudConfig(),
+    val isFirebaseReady: Boolean = false
+) {
+    val isSignedIn: Boolean
+        get() = !userUid.isNullOrBlank()
+}
+
+data class DailyCompletionRecord(
+    val epochDay: Long,
+    val tasksCompletedCount: Int = 0,
+    val goalsCompletedCount: Int = 0,
+    val totalGoalsCount: Int = 0,
+    val momentumScore: Float = 0f,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class ContributionDayCell(
+    val epochDay: Long,
+    val dateLabel: String,
+    val dayOfWeekIndex: Int, // 0 = Mon .. 6 = Sun
+    val isToday: Boolean = false,
+    val isFuture: Boolean = false,
+    val tasksCompleted: Int = 0,
+    val goalsCompleted: Int = 0,
+    val totalGoals: Int = 0,
+    val momentumScore: Float = 0f,
+    val combinedLevel: Int = 0, // 0..4 GitHub heatmap intensity
+    val taskLevel: Int = 0,     // 0..4
+    val goalLevel: Int = 0      // 0..4
+)
+
+data class ContributionChartSummary(
+    val cells: List<ContributionDayCell> = emptyList(),
+    val weeks: List<List<ContributionDayCell>> = emptyList(), // Columns of 7 days (Mon..Sun)
+    val currentStreakDays: Int = 0,
+    val longestStreakDays: Int = 0,
+    val totalTasksCompletedInWindow: Int = 0,
+    val totalGoalsMetInWindow: Int = 0,
+    val activeDaysCount: Int = 0
+)

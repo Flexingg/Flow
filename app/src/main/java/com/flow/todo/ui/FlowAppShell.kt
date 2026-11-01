@@ -73,6 +73,7 @@ fun FlowAppShell(
     viewModel: FlowViewModel,
     onRequestHealthPermissions: () -> Unit = {},
     onRequestUsagePermission: () -> Unit = {},
+    onSignInWithGoogle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -265,6 +266,7 @@ fun FlowAppShell(
                         totalTodayTargetCount = uiState.totalTodayTargetCount,
                         dailyProgress = uiState.dailyProgress,
                         evaluatedGoals = uiState.evaluatedGoals,
+                        contributionChart = uiState.contributionChart,
                         healthSnapshot = uiState.healthSnapshot,
                         shizukuStatus = uiState.shizukuStatus,
                         syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
@@ -308,6 +310,7 @@ fun FlowAppShell(
                         evaluatedGoals = uiState.evaluatedGoals,
                         projects = uiState.projects,
                         goalMomentumProgress = uiState.goalMomentumProgress,
+                        contributionChart = uiState.contributionChart,
                         healthSnapshot = uiState.healthSnapshot,
                         appUsageSnapshot = uiState.appUsageSnapshot,
                         shizukuStatus = uiState.shizukuStatus,
@@ -419,7 +422,7 @@ fun FlowAppShell(
             )
         }
 
-        // Living Flow Settings, Momentum Spectrum, Shizuku & Health Connect Sheet
+        // Living Flow Settings, Momentum Spectrum, Cloud Sync, Shizuku & Health Connect Sheet
         if (uiState.isSettingsOpen) {
             FluidSettingsSheet(
                 preferences = uiState.accessibility,
@@ -429,6 +432,12 @@ fun FlowAppShell(
                 shizukuStatus = uiState.shizukuStatus,
                 lastSyncedSystemColorHex = uiState.lastSyncedSystemColorHex,
                 healthSnapshot = uiState.healthSnapshot,
+                cloudSyncState = uiState.cloudSyncState,
+                onSignInWithGoogle = onSignInWithGoogle,
+                onSignInWithEmail = viewModel::signInWithEmail,
+                onSignOutCloud = viewModel::signOutCloud,
+                onSyncCloudNow = viewModel::syncWithCloudNow,
+                onSaveFirebaseConfig = viewModel::updateFirebaseConfig,
                 onRequestShizukuPermission = viewModel::requestShizukuPermission,
                 onSyncSystemColorsNow = viewModel::syncSystemColorsNow,
                 onRestoreSystemPalette = viewModel::restoreOriginalSystemPalette,
