@@ -1,3 +1,5 @@
+import java.io.ByteArrayOutputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,10 +10,9 @@ plugins {
 val baseVersionMajor = 0
 val baseVersionMinor = 0
 
-// Auto-increment versionCode and versionName with every commit or build
-val gitCommitCount: Int by lazy {
-    runCatching {
-        val stdout = java.io.ByteArrayOutputStream()
+fun computeGitCommitCount(): Int {
+    return runCatching {
+        val stdout = ByteArrayOutputStream()
         project.exec {
             commandLine("git", "rev-list", "--count", "HEAD")
             standardOutput = stdout
@@ -22,6 +23,8 @@ val gitCommitCount: Int by lazy {
     }
 }
 
+val gitCommitCount: Int = computeGitCommitCount()
+
 // Ensure versionCode strictly increments (> 1, since release v0.0.1 had versionCode 1)
 val appVersionCode: Int = (project.findProperty("versionCode") as? String)?.toIntOrNull()
     ?: System.getenv("VERSION_CODE")?.toIntOrNull()
@@ -31,7 +34,7 @@ val appVersionCode: Int = (project.findProperty("versionCode") as? String)?.toIn
 val appVersionName: String = (project.findProperty("versionName") as? String)
     ?: System.getenv("VERSION_NAME")
     ?: runCatching {
-        val tagOutput = java.io.ByteArrayOutputStream()
+        val tagOutput = ByteArrayOutputStream()
         project.exec {
             commandLine("git", "describe", "--tags", "--exact-match")
             standardOutput = tagOutput
