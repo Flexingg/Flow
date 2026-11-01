@@ -394,6 +394,37 @@ enum class ShizukuStatus(val label: String, val description: String) {
         get() = this == READY_SECURE_SETTINGS || this == READY_SHIZUKU
 }
 
+data class SubtaskItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val isCompleted: Boolean = false
+) {
+    fun toStoragePart(): String {
+        val safeTitle = title.replace("|", " ").replace(";;", " ")
+        return "$id|${if (isCompleted) 1 else 0}|$safeTitle"
+    }
+
+    companion object {
+        fun listToStorageString(subtasks: List<SubtaskItem>): String? {
+            if (subtasks.isEmpty()) return null
+            return subtasks.joinToString(";;") { it.toStoragePart() }
+        }
+
+        fun listFromStorageString(raw: String?): List<SubtaskItem> {
+            if (raw.isNullOrBlank()) return emptyList()
+            return raw.split(";;").mapNotNull { entry ->
+                val parts = entry.split("|", limit = 3)
+                if (parts.size < 3 || parts[2].isBlank()) null
+                else SubtaskItem(
+                    id = parts[0].ifBlank { java.util.UUID.randomUUID().toString() },
+                    isCompleted = parts[1] == "1",
+                    title = parts[2]
+                )
+            }
+        }
+    }
+}
+
 data class TaskItem(
     val id: String,
     val title: String,
@@ -405,8 +436,50 @@ data class TaskItem(
     val isCompleted: Boolean = false,
     val recurrenceRule: RecurrenceRule? = null,
     val healthGoal: HealthGoalSpec? = null,
+    val subtasks: List<SubtaskItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null
+) {
+    val completedSubtasksCount: Int
+        get() = subtasks.count { it.isCompleted }
+
+    val totalSubtasksCount: Int
+        get() = subtasks.size
+
+    val subtaskProgress: Float
+        get() = if (subtasks.isEmpty()) 0f else completedSubtasksCount.toFloat() / subtasks.size.toFloat()
+}
+
+data class ParsedTaskSuggestion(
+    val cleanedTitle: String,
+    val dueDateEpochDay: Long? = null,
+    val dueDateLabel: String? = null,
+    val matchedProject: Project? = null,
+    val suggestedNewProjectName: String? = null,
+    val isFlagged: Boolean = false,
+    val bucket: GtdBucket? = null,
+    val recurrenceRule: RecurrenceRule? = null,
+    val extractedSubtasks: List<String> = emptyList(),
+    val detectedTokens: List<String> = emptyList()
+) {
+    val hasAnyDetection: Boolean
+        get() = dueDateEpochDay != null || matchedProject != null || suggestedNewProjectName != null ||
+            isFlagged || bucket != null || recurrenceRule != null || extractedSubtasks.isNotEmpty()
+}
+
+enum class ShieldSeverity(val label: String) {
+    WARNING_80("80% Gentle Nudge"),
+    LIMIT_100("100% Limit Reached")
+}
+
+data class AppUsageShieldAlert(
+    val goalId: String,
+    val appName: String,
+    val packageName: String,
+    val severity: ShieldSeverity,
+    val usageRatio: Float,
+    val formattedStatus: String,
+    val timestampMillis: Long = System.currentTimeMillis()
 )
 
 data class UpcomingDayGroup(
@@ -496,7 +569,8 @@ data class AccessibilityPreferences(
     val useDynamicColor: Boolean = true,
     val useMomentumColorSpectrum: Boolean = true, // Morph across momentumStopHexes based on goals
     val syncSystemColorsWithShizuku: Boolean = false, // Sync Android System UI Material You seed color via Shizuku
-    val momentumStopHexes: List<Long> = DEFAULT_MOMENTUM_STOPS_HEX
+    val momentumStopHexes: List<Long> = DEFAULT_MOMENTUM_STOPS_HEX,
+    val enableAppUsageShield: Boolean = true // Active App Usage Shield & 80%/100% Liquid-Glass Nudge
 )
 
 enum class CloudSyncStatus(val label: String) {

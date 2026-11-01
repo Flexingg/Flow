@@ -9,11 +9,13 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,8 +32,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DirectionsRun
@@ -58,8 +64,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +78,7 @@ import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.ui.components.FluidGlowingProgressBar
+import com.flow.todo.ui.components.FluidMarkdownText
 import com.flow.todo.ui.components.FluidMenuAction
 import com.flow.todo.ui.components.FluidStretchyContextMenu
 import com.flow.todo.ui.theme.FluidShapes
@@ -89,10 +98,17 @@ fun TaskRow(
     onMoveBucket: (GtdBucket) -> Unit,
     onAssignToday: () -> Unit,
     onDelete: () -> Unit,
+    onToggleSubtask: (String) -> Unit = {},
+    onAddSubtask: (String) -> Unit = {},
+    onDeleteSubtask: (String) -> Unit = {},
     healthSnapshot: HealthDailySnapshot? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var subtasksExpanded by remember { mutableStateOf(true) }
+    var showAddSubtaskInput by remember { mutableStateOf(false) }
+    var newSubtaskTitle by remember { mutableStateOf("") }
+
     val isReducedMotion = FluidTheme.isReducedMotion
     val accentTint = project?.let { Color(it.colorHex) } ?: FluidTheme.colors.accent
 
@@ -165,6 +181,15 @@ fun TaskRow(
                 }
             ),
             FluidMenuAction(
+                label = "Add / Manage Subtasks",
+                icon = Icons.Rounded.Checklist,
+                onSelect = {
+                    menuExpanded = false
+                    subtasksExpanded = true
+                    showAddSubtaskInput = true
+                }
+            ),
+            FluidMenuAction(
                 label = "Move to Next Action",
                 icon = Icons.Rounded.PlayArrow,
                 onSelect = {
@@ -213,7 +238,7 @@ fun TaskRow(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             // Tactile Circular Checkbox (24.dp) with 44.dp touch target & Bubble Ring Burst
             Box(
@@ -295,7 +320,7 @@ fun TaskRow(
 
             Spacer(modifier = Modifier.width(FluidSpacing.sm))
 
-            // Task Content: Title, Notes preview, Badges
+            // Task Content: Title, Rich Markdown Notes preview, Badges, Interactive Subtasks
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -317,18 +342,22 @@ fun TaskRow(
 
                 if (task.notes.isNotBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = task.notes,
+                    FluidMarkdownText(
+                        markdown = task.notes,
+                        maxLines = if (subtasksExpanded) 8 else 2,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = FluidTheme.colors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = FluidTheme.colors.textSecondary
                     )
                 }
 
-                // Badges row: Project, Recurrence, Due Date, Health Goal, Flag with bubbly micro-interactions
-                val hasBadges = project != null || task.dueDateEpochDay != null || task.isFlagged || task.recurrenceRule?.isRecurring == true || task.healthGoal != null
+                // Badges row: Project, Subtasks, Recurrence, Due Date, Health Goal, Flag with bubbly micro-interactions
+                val hasBadges = project != null ||
+                    task.subtasks.isNotEmpty() ||
+                    task.dueDateEpochDay != null ||
+                    task.isFlagged ||
+                    task.recurrenceRule?.isRecurring == true ||
+                    task.healthGoal != null
+
                 this@Column.AnimatedVisibility(
                     visible = hasBadges,
                     enter = badgeEnter,
@@ -366,6 +395,42 @@ fun TaskRow(
                                         color = projectColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        // Subtasks Progress Badge (toggles checklist expansion)
+                        if (task.subtasks.isNotEmpty()) {
+                            val allSubtasksDone = task.completedSubtasksCount == task.totalSubtasksCount
+                            val subtaskBadgeColor = if (allSubtasksDone) {
+                                FluidTheme.colors.success
+                            } else {
+                                FluidTheme.colors.accent
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(subtaskBadgeColor.copy(alpha = 0.12f))
+                                    .border(1.dp, subtaskBadgeColor.copy(alpha = 0.28f), FluidShapes.full)
+                                    .clickable { subtasksExpanded = !subtasksExpanded }
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Checklist,
+                                        contentDescription = "Subtasks",
+                                        tint = subtaskBadgeColor,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "${task.completedSubtasksCount}/${task.totalSubtasksCount}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = subtaskBadgeColor
                                     )
                                 }
                             }
@@ -498,6 +563,169 @@ fun TaskRow(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = FluidTheme.colors.warning
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Interactive Subtask Checklists & Inline Subtask Creator
+                this@Column.AnimatedVisibility(
+                    visible = (task.subtasks.isNotEmpty() && subtasksExpanded) || showAddSubtaskInput,
+                    enter = expandVertically(FluidSprings.morph(isReducedMotion)) + fadeIn(),
+                    exit = shrinkVertically(FluidSprings.morph(isReducedMotion)) + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        task.subtasks.forEach { subtask ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 28.dp)
+                                    .clip(FluidShapes.sm)
+                                    .background(
+                                        if (FluidTheme.colors.isDark) {
+                                            Color.White.copy(alpha = 0.04f)
+                                        } else {
+                                            Color.Black.copy(alpha = 0.025f)
+                                        }
+                                    )
+                                    .clickable { onToggleSubtask(subtask.id) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Mini circular checkbox (16.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (subtask.isCompleted) accentTint else Color.Transparent
+                                        )
+                                        .border(
+                                            width = 1.25.dp,
+                                            color = if (subtask.isCompleted) {
+                                                accentTint
+                                            } else {
+                                                FluidTheme.colors.textTertiary.copy(alpha = 0.45f)
+                                            },
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (subtask.isCompleted) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = "Subtask completed",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Text(
+                                    text = subtask.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = if (subtask.isCompleted) {
+                                        FluidTheme.colors.textTertiary
+                                    } else {
+                                        FluidTheme.colors.textPrimary
+                                    },
+                                    textDecoration = if (subtask.isCompleted) {
+                                        TextDecoration.LineThrough
+                                    } else {
+                                        TextDecoration.None
+                                    },
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .clickable { onDeleteSubtask(subtask.id) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove subtask",
+                                        tint = FluidTheme.colors.textTertiary.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Compact inline "+ Add subtask..." row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 28.dp)
+                                .clip(FluidShapes.sm)
+                                .border(
+                                    width = 1.dp,
+                                    color = FluidTheme.colors.divider,
+                                    shape = FluidShapes.sm
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                tint = FluidTheme.colors.accent,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (newSubtaskTitle.isEmpty()) {
+                                    Text(
+                                        text = "+ Add subtask...",
+                                        fontSize = 12.sp,
+                                        color = FluidTheme.colors.textTertiary
+                                    )
+                                }
+                                BasicTextField(
+                                    value = newSubtaskTitle,
+                                    onValueChange = { newSubtaskTitle = it },
+                                    singleLine = true,
+                                    textStyle = TextStyle(
+                                        fontSize = 12.sp,
+                                        color = FluidTheme.colors.textPrimary
+                                    ),
+                                    cursorBrush = SolidColor(FluidTheme.colors.accent),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (newSubtaskTitle.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(accentTint.copy(alpha = 0.16f))
+                                        .clickable {
+                                            val clean = newSubtaskTitle.trim()
+                                            if (clean.isNotEmpty()) {
+                                                onAddSubtask(clean)
+                                                newSubtaskTitle = ""
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Add",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = accentTint
                                     )
                                 }
                             }

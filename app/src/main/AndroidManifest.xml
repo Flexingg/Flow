@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Notifications for Active App Usage Shield 80% & 100% Nudges -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- System UI Material You Palette Sync via Shizuku / WRITE_SECURE_SETTINGS -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
@@ -37,12 +40,15 @@
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
 
-    <!-- Package visibility for Health Connect, Shizuku, and Installed Launcher Apps -->
+    <!-- Package visibility for Health Connect, Shizuku, Speech Recognition, and Installed Launcher Apps -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
         <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -61,6 +67,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Flow"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -68,10 +75,38 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App Shortcuts & Widget / Tile Quick Actions -->
+            <intent-filter>
+                <action android:name="com.flow.todo.ACTION_QUICK_CAPTURE" />
+                <action android:name="com.flow.todo.ACTION_VOICE_CAPTURE" />
+                <action android:name="com.flow.todo.ACTION_OPEN_GOALS" />
+                <action android:name="com.flow.todo.ACTION_OPEN_TODAY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- Google Assistant Voice Note / Task Capture ("Hey Google, add a note in Flow") -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.actions.CREATE_NOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+
+            <!-- Share Text from Any App into Flow Quick Capture -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
             <!-- Health Connect Permissions Rationale (Android 13 and below / Play Store Health Connect) -->
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+
+            <!-- Static Launcher App Shortcuts -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- Health Connect Permission Usage Rationale for Android 14+ (API 34+) -->
@@ -85,6 +120,32 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Living Flow Interactive Home Screen & Lock Screen Glass Widget -->
+        <receiver
+            android:name=".widget.FlowGlassWidgetProvider"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.flow.todo.ACTION_WIDGET_COMPLETE_TOP_TASK" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flow_glass_widget_info" />
+        </receiver>
+
+        <!-- Android Quick Settings Tile for Live Momentum & 1-Tap Quick Capture -->
+        <service
+            android:name=".system.FlowQuickSettingsTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_monochrome"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <!-- Shizuku Binder Provider -->
         <provider

@@ -52,7 +52,8 @@ class FlowRepository(
             useDynamicColor = prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true),
             useMomentumColorSpectrum = prefs.getBoolean(KEY_USE_MOMENTUM_SPECTRUM, true),
             syncSystemColorsWithShizuku = prefs.getBoolean(KEY_SYNC_SHIZUKU_COLORS, false),
-            momentumStopHexes = loadedStops
+            momentumStopHexes = loadedStops,
+            enableAppUsageShield = prefs.getBoolean(KEY_ENABLE_APP_USAGE_SHIELD, true)
         )
     }
 
@@ -139,6 +140,7 @@ class FlowRepository(
             putBoolean(KEY_USE_DYNAMIC_COLOR, updated.useDynamicColor)
             putBoolean(KEY_USE_MOMENTUM_SPECTRUM, updated.useMomentumColorSpectrum)
             putBoolean(KEY_SYNC_SHIZUKU_COLORS, updated.syncSystemColorsWithShizuku)
+            putBoolean(KEY_ENABLE_APP_USAGE_SHIELD, updated.enableAppUsageShield)
             putString(
                 KEY_MOMENTUM_STOP_HEXES,
                 updated.momentumStopHexes.joinToString(",") { java.lang.Long.toHexString(it) }
@@ -165,5 +167,6 @@ class FlowRepository(
         private const val KEY_USE_MOMENTUM_SPECTRUM = "use_momentum_spectrum"
         private const val KEY_SYNC_SHIZUKU_COLORS = "sync_shizuku_colors"
         private const val KEY_MOMENTUM_STOP_HEXES = "momentum_stop_hexes"
+        private const val KEY_ENABLE_APP_USAGE_SHIELD = "enable_app_usage_shield"
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -44,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.ui.components.FluidIslandNavBar
 import com.flow.todo.ui.components.FluidTopBar
+import com.flow.todo.ui.components.FluidUsageShieldBanner
 import com.flow.todo.ui.components.FluidWaveSplashOverlay
 import com.flow.todo.ui.components.rememberSplashTransitionState
 import com.flow.todo.ui.screens.FluidSettingsSheet
@@ -251,6 +253,9 @@ fun FlowAppShell(
                         },
                         onDeleteTask = viewModel::deleteTask,
                         onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
+                        onToggleSubtask = viewModel::toggleSubtaskCompletion,
+                        onAddSubtask = viewModel::addSubtask,
+                        onDeleteSubtask = viewModel::deleteSubtask,
                         contentPadding = screenContentPadding,
                         listState = inboxListState
                     )
@@ -285,6 +290,9 @@ fun FlowAppShell(
                             viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
                         },
                         onDeleteTask = viewModel::deleteTask,
+                        onToggleSubtask = viewModel::toggleSubtaskCompletion,
+                        onAddSubtask = viewModel::addSubtask,
+                        onDeleteSubtask = viewModel::deleteSubtask,
                         contentPadding = screenContentPadding,
                         listState = todayListState
                     )
@@ -302,6 +310,9 @@ fun FlowAppShell(
                         onDeleteTask = viewModel::deleteTask,
                         onAddProject = viewModel::addProject,
                         onDeleteProject = viewModel::deleteProject,
+                        onToggleSubtask = viewModel::toggleSubtaskCompletion,
+                        onAddSubtask = viewModel::addSubtask,
+                        onDeleteSubtask = viewModel::deleteSubtask,
                         contentPadding = screenContentPadding,
                         listState = projectsListState
                     )
@@ -315,6 +326,11 @@ fun FlowAppShell(
                         appUsageSnapshot = uiState.appUsageSnapshot,
                         shizukuStatus = uiState.shizukuStatus,
                         syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
+                        enableAppUsageShield = uiState.accessibility.enableAppUsageShield,
+                        onToggleAppUsageShield = { enabled ->
+                            viewModel.updateAccessibility { it.copy(enableAppUsageShield = enabled) }
+                        },
+                        onTestUsageShield = viewModel::triggerTestShieldNudge,
                         onOpenGoalCreator = { viewModel.setGoalCreatorOpen(true) },
                         onDeleteGoal = viewModel::deleteGoal,
                         onAddPresetGoal = { title, category, comparison, targetValue, period, projectId, healthMetric, targetPackageName, targetAppName, appUsageMetric ->
@@ -373,14 +389,29 @@ fun FlowAppShell(
                 onSettingsClick = { viewModel.setSettingsOpen(true) },
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            // Floating ColorOS 17 Liquid-Glass App Usage Shield Banner
+            FluidUsageShieldBanner(
+                alert = uiState.activeShieldAlert,
+                onDismiss = viewModel::dismissShieldAlert,
+                onOpenGoals = {
+                    viewModel.dismissShieldAlert()
+                    viewModel.selectTab(FlowTab.GOALS)
+                },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = topInset + 74.dp, start = 16.dp, end = 16.dp)
+            )
         }
 
-        // Living Flow Quick-Capture Sheet (GTD Tasks)
+        // Living Flow Quick-Capture Sheet (GTD Tasks + NLP Smart Parse + Voice + Subtasks)
         if (uiState.isQuickCaptureOpen) {
             QuickCaptureSheet(
                 projects = uiState.projects,
+                initialTitle = uiState.quickCaptureInitialTitle,
+                autoStartVoice = uiState.quickCaptureAutoVoice,
                 onDismiss = { viewModel.setQuickCaptureOpen(false) },
-                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal ->
+                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal, subtasks ->
                     viewModel.addTask(
                         title = title,
                         notes = notes,
@@ -389,7 +420,8 @@ fun FlowAppShell(
                         projectId = projectId,
                         isFlagged = isFlagged,
                         recurrenceRule = recurrenceRule,
-                        healthGoal = healthGoal
+                        healthGoal = healthGoal,
+                        subtasks = subtasks
                     )
                 }
             )

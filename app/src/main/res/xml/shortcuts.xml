@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="shortcut_quick_capture"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_round"
+        android:shortcutShortLabel="@string/shortcut_quick_capture_short"
+        android:shortcutLongLabel="@string/shortcut_quick_capture_long">
+        <intent
+            android:action="com.flow.todo.ACTION_QUICK_CAPTURE"
+            android:targetPackage="com.flow.todo"
+            android:targetClass="com.flow.todo.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_voice_capture"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_round"
+        android:shortcutShortLabel="@string/shortcut_voice_capture_short"
+        android:shortcutLongLabel="@string/shortcut_voice_capture_long">
+        <intent
+            android:action="com.flow.todo.ACTION_VOICE_CAPTURE"
+            android:targetPackage="com.flow.todo"
+            android:targetClass="com.flow.todo.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_open_goals"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_round"
+        android:shortcutShortLabel="@string/shortcut_goals_short"
+        android:shortcutLongLabel="@string/shortcut_goals_long">
+        <intent
+            android:action="com.flow.todo.ACTION_OPEN_GOALS"
+            android:targetPackage="com.flow.todo"
+            android:targetClass="com.flow.todo.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_open_today"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_round"
+        android:shortcutShortLabel="@string/shortcut_today_short"
+        android:shortcutLongLabel="@string/shortcut_today_long">
+        <intent
+            android:action="com.flow.todo.ACTION_OPEN_TODAY"
+            android:targetPackage="com.flow.todo"
+            android:targetClass="com.flow.todo.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

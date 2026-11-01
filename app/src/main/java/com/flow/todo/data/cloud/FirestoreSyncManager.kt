@@ -770,6 +770,7 @@ class FirestoreSyncManager(
             "isCompleted" to task.isCompleted,
             "recurrenceRuleRaw" to task.recurrenceRule?.toStorageString(),
             "healthGoalRaw" to task.healthGoal?.toStorageString(),
+            "subtasksRaw" to com.flow.todo.domain.model.SubtaskItem.listToStorageString(task.subtasks),
             "createdAt" to task.createdAt,
             "completedAt" to task.completedAt
         )
@@ -786,6 +787,7 @@ class FirestoreSyncManager(
             val isCompleted = data["isCompleted"] as? Boolean ?: false
             val recurrenceRuleRaw = data["recurrenceRuleRaw"] as? String
             val healthGoalRaw = data["healthGoalRaw"] as? String
+            val subtasksRaw = data["subtasksRaw"] as? String
             val createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
             val completedAt = (data["completedAt"] as? Number)?.toLong()
 
@@ -800,6 +802,7 @@ class FirestoreSyncManager(
                 isCompleted = isCompleted,
                 recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
                 healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
+                subtasks = com.flow.todo.domain.model.SubtaskItem.listFromStorageString(subtasksRaw),
                 createdAt = createdAt,
                 completedAt = completedAt
             )
@@ -909,7 +912,8 @@ class FirestoreSyncManager(
             "useDynamicColor" to prefs.useDynamicColor,
             "useMomentumColorSpectrum" to prefs.useMomentumColorSpectrum,
             "syncSystemColorsWithShizuku" to prefs.syncSystemColorsWithShizuku,
-            "momentumStopHexes" to prefs.momentumStopHexes
+            "momentumStopHexes" to prefs.momentumStopHexes,
+            "enableAppUsageShield" to prefs.enableAppUsageShield
         )
 
         fun mapToPreferences(data: Map<String, Any?>): AccessibilityPreferences {
@@ -930,7 +934,8 @@ class FirestoreSyncManager(
                 useDynamicColor = data["useDynamicColor"] as? Boolean ?: true,
                 useMomentumColorSpectrum = data["useMomentumColorSpectrum"] as? Boolean ?: true,
                 syncSystemColorsWithShizuku = data["syncSystemColorsWithShizuku"] as? Boolean ?: false,
-                momentumStopHexes = stops
+                momentumStopHexes = stops,
+                enableAppUsageShield = data["enableAppUsageShield"] as? Boolean ?: true
             )
         }
     }

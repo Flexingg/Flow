@@ -116,6 +116,9 @@ fun TodayNextScreen(
     onMoveBucket: (String, GtdBucket) -> Unit,
     onAssignToday: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
+    onToggleSubtask: (String, String) -> Unit = { _, _ -> },
+    onAddSubtask: (String, String) -> Unit = { _, _ -> },
+    onDeleteSubtask: (String, String) -> Unit = { _, _ -> },
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -658,7 +661,10 @@ fun TodayNextScreen(
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
                                                     onDelete = { onDeleteTask(task.id) },
-                                                    healthSnapshot = healthSnapshot
+                                                    healthSnapshot = healthSnapshot,
+                                                    onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                    onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                 )
                                             }
                                         }
@@ -780,7 +786,10 @@ fun TodayNextScreen(
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
                                                     onDelete = { onDeleteTask(task.id) },
-                                                    healthSnapshot = healthSnapshot
+                                                    healthSnapshot = healthSnapshot,
+                                                    onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                    onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                 )
                                             }
                                         }
@@ -883,7 +892,10 @@ fun TodayNextScreen(
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
                                                     onDelete = { onDeleteTask(task.id) },
-                                                    healthSnapshot = healthSnapshot
+                                                    healthSnapshot = healthSnapshot,
+                                                    onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                    onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                 )
                                             }
                                         }
@@ -1090,7 +1102,10 @@ fun TodayNextScreen(
                                                             onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                             onAssignToday = { onAssignToday(task.id) },
                                                             onDelete = { onDeleteTask(task.id) },
-                                                            healthSnapshot = healthSnapshot
+                                                            healthSnapshot = healthSnapshot,
+                                                            onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                            onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                            onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                         )
                                                     }
                                                 }
@@ -1189,7 +1204,10 @@ fun TodayNextScreen(
                                                         onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                         onAssignToday = { onAssignToday(task.id) },
                                                         onDelete = { onDeleteTask(task.id) },
-                                                        healthSnapshot = healthSnapshot
+                                                        healthSnapshot = healthSnapshot,
+                                                        onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                        onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                     )
                                                 }
                                             }

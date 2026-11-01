@@ -1,5 +1,10 @@
 package com.flow.todo.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -10,29 +15,38 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,13 +75,18 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthGoalSpec
+import com.flow.todo.domain.model.ParsedTaskSuggestion
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.RecurrenceType
+import com.flow.todo.domain.model.SubtaskItem
+import com.flow.todo.domain.nlp.NaturalLanguageTaskParser
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.theme.FluidShapes
@@ -94,6 +113,8 @@ private enum class QuickDateOption(val label: String) {
 fun QuickCaptureSheet(
     projects: List<Project>,
     onDismiss: () -> Unit,
+    initialTitle: String = "",
+    autoStartVoice: Boolean = false,
     onSaveTask: (
         title: String,
         notes: String,
@@ -102,7 +123,8 @@ fun QuickCaptureSheet(
         projectId: String?,
         isFlagged: Boolean,
         recurrenceRule: RecurrenceRule?,
-        healthGoal: HealthGoalSpec?
+        healthGoal: HealthGoalSpec?,
+        subtasks: List<SubtaskItem>
     ) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -111,12 +133,18 @@ fun QuickCaptureSheet(
     val isReducedMotion = FluidTheme.isReducedMotion
     val today = remember { LocalDate.now() }
 
-    var title by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf(initialTitle) }
     var notes by remember { mutableStateOf("") }
     var selectedBucket by remember { mutableStateOf(GtdBucket.INBOX) }
     var selectedDateOption by remember { mutableStateOf(QuickDateOption.NO_DATE) }
+    var customParsedDueEpochDay by remember { mutableStateOf<Long?>(null) }
     var selectedProjectId by remember { mutableStateOf<String?>(null) }
     var isFlagged by remember { mutableStateOf(false) }
+    var smartParseEnabled by remember { mutableStateOf(true) }
+
+    // Interactive Subtasks / Checklist state
+    var subtasks by remember { mutableStateOf(listOf<SubtaskItem>()) }
+    var newSubtaskText by remember { mutableStateOf("") }
 
     // Recurrence configuration state
     var selectedRecurrenceType by remember { mutableStateOf(RecurrenceType.NONE) }
@@ -129,11 +157,98 @@ fun QuickCaptureSheet(
     var isTitleFocused by remember { mutableStateOf(false) }
     var isNotesFocused by remember { mutableStateOf(false) }
 
+    // Real-time Natural Language Task Parser
+    val parsedSuggestion = remember(title, notes, projects, today) {
+        NaturalLanguageTaskParser.parse(
+            rawTitle = title,
+            rawNotes = notes,
+            projects = projects,
+            today = today
+        )
+    }
+
+    fun applyParsedSuggestionNow(suggestion: ParsedTaskSuggestion) {
+        if (suggestion.cleanedTitle.isNotBlank()) {
+            title = suggestion.cleanedTitle
+        }
+        suggestion.dueDateEpochDay?.let { epochDay ->
+            customParsedDueEpochDay = epochDay
+            val todayEpoch = today.toEpochDay()
+            selectedDateOption = when (epochDay) {
+                todayEpoch -> QuickDateOption.TODAY
+                todayEpoch + 1L -> QuickDateOption.TOMORROW
+                todayEpoch + 3L -> QuickDateOption.IN_3_DAYS
+                today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)).toEpochDay() -> QuickDateOption.THIS_WEEKEND
+                todayEpoch + 7L -> QuickDateOption.NEXT_WEEK
+                else -> selectedDateOption
+            }
+        }
+        suggestion.matchedProject?.let { selectedProjectId = it.id }
+        if (suggestion.isFlagged) {
+            isFlagged = true
+        }
+        suggestion.bucket?.let { selectedBucket = it }
+        suggestion.recurrenceRule?.let { rule ->
+            selectedRecurrenceType = rule.type
+            selectedDailyInterval = rule.interval
+            selectedWeeklyDayOfWeek = rule.dayOfWeek
+            selectedMonthlyDay = rule.dayOfMonth
+            selectedNthWeekdayOrdinal = rule.nthWeekday
+            selectedNthWeekdayDayOfWeek = rule.dayOfWeek
+        }
+        if (suggestion.extractedSubtasks.isNotEmpty()) {
+            val existingLower = subtasks.map { it.title.lowercase() }.toSet()
+            val added = suggestion.extractedSubtasks
+                .filter { it.lowercase() !in existingLower }
+                .map { SubtaskItem(title = it) }
+            subtasks = subtasks + added
+        }
+    }
+
+    // 1-Tap Voice Speech Recognizer Launcher
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spokenText = matches?.firstOrNull()?.trim().orEmpty()
+            if (spokenText.isNotEmpty()) {
+                val suggestion = NaturalLanguageTaskParser.parse(
+                    rawTitle = spokenText,
+                    rawNotes = notes,
+                    projects = projects,
+                    today = today
+                )
+                title = suggestion.cleanedTitle.ifBlank { spokenText }
+                applyParsedSuggestionNow(suggestion)
+            }
+        }
+    }
+
+    fun launchVoiceCapture() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(
+                RecognizerIntent.EXTRA_PROMPT,
+                "Speak your task (e.g. 'Submit deck tomorrow #Work !flag')"
+            )
+        }
+        runCatching { voiceLauncher.launch(intent) }
+    }
+
     // Bouncy entrance animation for sheet container
     var sheetVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         sheetVisible = true
-        focusRequester.requestFocus()
+        if (!autoStartVoice) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(autoStartVoice) {
+        if (autoStartVoice) {
+            launchVoiceCapture()
+        }
     }
 
     val sheetEntranceScale by animateFloatAsState(
@@ -212,7 +327,7 @@ fun QuickCaptureSheet(
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
 
-                // Sheet Title
+                // Sheet Title + Voice & Flag quick toggles
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -225,14 +340,26 @@ fun QuickCaptureSheet(
                         color = FluidTheme.colors.textPrimary
                     )
 
-                    // Flag quick toggle in header
-                    FluidFilterChip(
-                        label = if (isFlagged) "Flagged" else "Flag",
-                        selected = isFlagged,
-                        onClick = { isFlagged = !isFlagged },
-                        leadingIcon = Icons.Rounded.Flag,
-                        accentColor = FluidTheme.colors.warning
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(FluidSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FluidFilterChip(
+                            label = "Voice",
+                            selected = false,
+                            onClick = { launchVoiceCapture() },
+                            leadingIcon = Icons.Rounded.Mic,
+                            accentColor = FluidTheme.colors.accent
+                        )
+
+                        FluidFilterChip(
+                            label = if (isFlagged) "Flagged" else "Flag",
+                            selected = isFlagged,
+                            onClick = { isFlagged = !isFlagged },
+                            leadingIcon = Icons.Rounded.Flag,
+                            accentColor = FluidTheme.colors.warning
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
@@ -271,8 +398,8 @@ fun QuickCaptureSheet(
                 ) {
                     if (title.isEmpty()) {
                         Text(
-                            text = "What's on your mind? (Capture thoughts)",
-                            fontSize = 16.sp,
+                            text = "Try: \"Submit deck tomorrow #Work !flag\"",
+                            fontSize = 15.sp,
                             color = FluidTheme.colors.textTertiary
                         )
                     }
@@ -293,9 +420,131 @@ fun QuickCaptureSheet(
                     )
                 }
 
+                // Luminous Smart NLP Detection Strip
+                this@Column.AnimatedVisibility(
+                    visible = parsedSuggestion.hasAnyDetection,
+                    enter = expandVertically(FluidSprings.morph(isReducedMotion)) + fadeIn(),
+                    exit = shrinkVertically(FluidSprings.morph(isReducedMotion)) + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = FluidSpacing.xs)
+                            .clip(FluidShapes.md)
+                            .background(FluidTheme.colors.accent.copy(alpha = 0.10f))
+                            .border(
+                                width = 1.dp,
+                                color = FluidTheme.colors.accent.copy(alpha = 0.28f),
+                                shape = FluidShapes.md
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.AutoAwesome,
+                                    contentDescription = "Smart Parse",
+                                    tint = FluidTheme.colors.accent,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "✨ Smart Parse:",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = FluidTheme.colors.accent
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(
+                                            if (smartParseEnabled) {
+                                                FluidTheme.colors.accent.copy(alpha = 0.18f)
+                                            } else {
+                                                FluidTheme.colors.divider
+                                            }
+                                        )
+                                        .clickable { smartParseEnabled = !smartParseEnabled }
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = if (smartParseEnabled) "Auto-Apply: ON" else "Auto-Apply: OFF",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (smartParseEnabled) {
+                                            FluidTheme.colors.accent
+                                        } else {
+                                            FluidTheme.colors.textTertiary
+                                        }
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(FluidTheme.colors.accent)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            applyParsedSuggestionNow(parsedSuggestion)
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "Apply Now",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            parsedSuggestion.detectedTokens.forEach { token ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(FluidShapes.full)
+                                        .background(FluidTheme.colors.accent.copy(alpha = 0.15f))
+                                        .border(
+                                            width = 1.dp,
+                                            color = FluidTheme.colors.accent.copy(alpha = 0.35f),
+                                            shape = FluidShapes.full
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = token,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = FluidTheme.colors.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(FluidSpacing.sm))
 
-                // Notes Field with bubbly focus scale and subtle contour glow
+                // Notes Field with Markdown hint
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -329,15 +578,15 @@ fun QuickCaptureSheet(
                 ) {
                     if (notes.isEmpty()) {
                         Text(
-                            text = "Add notes or context (optional)",
-                            fontSize = 14.sp,
+                            text = "Add notes (supports **bold**, *italic*, `code`, or - [ ] subtasks)",
+                            fontSize = 13.sp,
                             color = FluidTheme.colors.textTertiary
                         )
                     }
                     BasicTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        maxLines = 3,
+                        maxLines = 4,
                         textStyle = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Normal,
@@ -348,6 +597,232 @@ fun QuickCaptureSheet(
                             .fillMaxWidth()
                             .onFocusChanged { isNotesFocused = it.isFocused }
                     )
+                }
+
+                Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                // Interactive Subtasks / Checklist Section
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Checklist,
+                                contentDescription = null,
+                                tint = FluidTheme.colors.textTertiary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "SUBTASKS / CHECKLIST",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = FluidTheme.colors.textTertiary
+                            )
+                        }
+
+                        if (subtasks.isNotEmpty()) {
+                            Text(
+                                text = "${subtasks.count { it.isCompleted }}/${subtasks.size} steps",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FluidTheme.colors.accent
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                    // Existing subtask items
+                    if (subtasks.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = FluidSpacing.xs),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            subtasks.forEach { item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = 32.dp)
+                                        .clip(FluidShapes.sm)
+                                        .background(
+                                            if (FluidTheme.colors.isDark) {
+                                                Color.White.copy(alpha = 0.05f)
+                                            } else {
+                                                Color.Black.copy(alpha = 0.03f)
+                                            }
+                                        )
+                                        .clickable {
+                                            subtasks = subtasks.map {
+                                                if (it.id == item.id) it.copy(isCompleted = !it.isCompleted) else it
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (item.isCompleted) FluidTheme.colors.accent else Color.Transparent
+                                            )
+                                            .border(
+                                                width = 1.25.dp,
+                                                color = if (item.isCompleted) {
+                                                    FluidTheme.colors.accent
+                                                } else {
+                                                    FluidTheme.colors.textTertiary.copy(alpha = 0.5f)
+                                                },
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (item.isCompleted) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Text(
+                                        text = item.title,
+                                        fontSize = 13.sp,
+                                        color = if (item.isCompleted) {
+                                            FluidTheme.colors.textTertiary
+                                        } else {
+                                            FluidTheme.colors.textPrimary
+                                        },
+                                        textDecoration = if (item.isCompleted) {
+                                            TextDecoration.LineThrough
+                                        } else {
+                                            TextDecoration.None
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .clickable {
+                                                subtasks = subtasks.filterNot { it.id == item.id }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Remove step",
+                                            tint = FluidTheme.colors.textTertiary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Add new subtask input row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(FluidShapes.md)
+                            .background(
+                                if (FluidTheme.colors.isDark) {
+                                    Color.White.copy(alpha = 0.05f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.025f)
+                                }
+                            )
+                            .border(1.dp, FluidTheme.colors.divider, FluidShapes.md)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (newSubtaskText.isEmpty()) {
+                                Text(
+                                    text = "Add a checklist step...",
+                                    fontSize = 13.sp,
+                                    color = FluidTheme.colors.textTertiary
+                                )
+                            }
+                            BasicTextField(
+                                value = newSubtaskText,
+                                onValueChange = { newSubtaskText = it },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontSize = 13.sp,
+                                    color = FluidTheme.colors.textPrimary
+                                ),
+                                cursorBrush = SolidColor(FluidTheme.colors.accent),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(
+                                    if (newSubtaskText.isNotBlank()) {
+                                        FluidTheme.colors.accent
+                                    } else {
+                                        FluidTheme.colors.accent.copy(alpha = 0.15f)
+                                    }
+                                )
+                                .clickable(enabled = newSubtaskText.isNotBlank()) {
+                                    val clean = newSubtaskText.trim()
+                                    if (clean.isNotEmpty()) {
+                                        subtasks = subtasks + SubtaskItem(title = clean)
+                                        newSubtaskText = ""
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = "Add Subtask",
+                                    tint = if (newSubtaskText.isNotBlank()) {
+                                        Color.White
+                                    } else {
+                                        FluidTheme.colors.accent
+                                    },
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "Add",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (newSubtaskText.isNotBlank()) {
+                                        Color.White
+                                    } else {
+                                        FluidTheme.colors.accent
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
@@ -424,6 +899,7 @@ fun QuickCaptureSheet(
                                 selected = selectedDateOption == option,
                                 onClick = {
                                     selectedDateOption = option
+                                    customParsedDueEpochDay = null
                                     if (option != QuickDateOption.NO_DATE && selectedBucket == GtdBucket.INBOX) {
                                         selectedBucket = GtdBucket.SCHEDULED
                                     }
@@ -737,23 +1213,57 @@ fun QuickCaptureSheet(
                         if (title.isNotBlank()) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val now = LocalDate.now()
-                            val dueDateEpochDay = when (selectedDateOption) {
-                                QuickDateOption.NO_DATE -> null
+                            val manualDateEpochDay = when (selectedDateOption) {
+                                QuickDateOption.NO_DATE -> customParsedDueEpochDay
                                 QuickDateOption.TODAY -> now.toEpochDay()
                                 QuickDateOption.TOMORROW -> now.plusDays(1).toEpochDay()
                                 QuickDateOption.IN_3_DAYS -> now.plusDays(3).toEpochDay()
                                 QuickDateOption.THIS_WEEKEND -> now.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)).toEpochDay()
                                 QuickDateOption.NEXT_WEEK -> now.plusDays(7).toEpochDay()
                             }
+
+                            val useSmart = smartParseEnabled && parsedSuggestion.hasAnyDetection
+                            val finalTitle = if (useSmart) {
+                                parsedSuggestion.cleanedTitle.ifBlank { title.trim() }
+                            } else {
+                                title.trim()
+                            }
+                            val finalDueDate = manualDateEpochDay ?: if (useSmart) parsedSuggestion.dueDateEpochDay else null
+                            val finalProjectId = selectedProjectId ?: if (useSmart) parsedSuggestion.matchedProject?.id else null
+                            val finalFlagged = isFlagged || (useSmart && parsedSuggestion.isFlagged)
+                            val finalRecurrence = builtRule ?: if (useSmart) parsedSuggestion.recurrenceRule else null
+                            val finalBucket = when {
+                                selectedBucket != GtdBucket.INBOX -> selectedBucket
+                                useSmart && parsedSuggestion.bucket != null -> parsedSuggestion.bucket
+                                finalDueDate != null -> GtdBucket.SCHEDULED
+                                else -> GtdBucket.INBOX
+                            }
+
+                            val mergedSubtasks = buildList {
+                                addAll(subtasks)
+                                if (newSubtaskText.isNotBlank()) {
+                                    add(SubtaskItem(title = newSubtaskText.trim()))
+                                }
+                                if (useSmart && parsedSuggestion.extractedSubtasks.isNotEmpty()) {
+                                    val existingLower = map { it.title.lowercase() }.toSet()
+                                    parsedSuggestion.extractedSubtasks.forEach { extracted ->
+                                        if (extracted.lowercase() !in existingLower) {
+                                            add(SubtaskItem(title = extracted))
+                                        }
+                                    }
+                                }
+                            }
+
                             onSaveTask(
-                                title.trim(),
+                                finalTitle,
                                 notes.trim(),
-                                selectedBucket,
-                                dueDateEpochDay,
-                                selectedProjectId,
-                                isFlagged,
-                                builtRule,
-                                null
+                                finalBucket,
+                                finalDueDate,
+                                finalProjectId,
+                                finalFlagged,
+                                finalRecurrence,
+                                null,
+                                mergedSubtasks
                             )
                             onDismiss()
                         }

@@ -98,6 +98,9 @@ fun ProjectsScreen(
     onDeleteTask: (String) -> Unit,
     onAddProject: (String, Long) -> Unit,
     onDeleteProject: (String) -> Unit,
+    onToggleSubtask: (String, String) -> Unit = { _, _ -> },
+    onAddSubtask: (String, String) -> Unit = { _, _ -> },
+    onDeleteSubtask: (String, String) -> Unit = { _, _ -> },
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -328,7 +331,10 @@ fun ProjectsScreen(
                                                     onToggleFlag = { onToggleFlag(task.id) },
                                                     onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                                     onAssignToday = { onAssignToday(task.id) },
-                                                    onDelete = { onDeleteTask(task.id) }
+                                                    onDelete = { onDeleteTask(task.id) },
+                                                    onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                                    onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                                 )
                                             }
                                         }
@@ -459,7 +465,10 @@ fun ProjectsScreen(
                                         onToggleFlag = { onToggleFlag(task.id) },
                                         onMoveBucket = { bucket -> onMoveBucket(task.id, bucket) },
                                         onAssignToday = { onAssignToday(task.id) },
-                                        onDelete = { onDeleteTask(task.id) }
+                                        onDelete = { onDeleteTask(task.id) },
+                                        onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
+                                        onAddSubtask = { title -> onAddSubtask(task.id, title) },
+                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
                                     )
                                 }
                             }

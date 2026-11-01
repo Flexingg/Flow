@@ -13,4 +13,14 @@
     <string name="cd_edit_task">Edit task</string>
     <string name="cd_settings">Accessibility and Settings</string>
     <string name="cd_close">Close dialog</string>
+    <string name="widget_description">Living Glass Flow Goal Bar, 12-week contribution heatmap, and 1-tap task checkoff</string>
+    <string name="tile_label">Flow Momentum</string>
+    <string name="shortcut_quick_capture_short">Quick Capture</string>
+    <string name="shortcut_quick_capture_long">Quick Capture Task</string>
+    <string name="shortcut_voice_capture_short">Voice Capture</string>
+    <string name="shortcut_voice_capture_long">Voice Capture Task</string>
+    <string name="shortcut_goals_short">Goals &amp; Heatmap</string>
+    <string name="shortcut_goals_long">Open Goals &amp; Heatmap</string>
+    <string name="shortcut_today_short">Today &amp; Next</string>
+    <string name="shortcut_today_long">Open Today &amp; Next Actions</string>
 </resources>

@@ -8,8 +8,10 @@ import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
 import com.flow.todo.data.system.ShizukuSystemColorManager
 import com.flow.todo.data.usage.AppUsageManager
+import com.flow.todo.data.usage.AppUsageShieldMonitor
 import com.flow.todo.domain.model.AccessibilityPreferences
 import com.flow.todo.domain.model.AppUsageMetricType
+import com.flow.todo.domain.model.AppUsageShieldAlert
 import com.flow.todo.domain.model.AppUsageSnapshot
 import com.flow.todo.domain.model.CloudSyncState
 import com.flow.todo.domain.model.ContributionChartSummary
@@ -31,8 +33,10 @@ import com.flow.todo.domain.model.ProjectWithStats
 import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.RecurrenceType
 import com.flow.todo.domain.model.ShizukuStatus
+import com.flow.todo.domain.model.SubtaskItem
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import com.flow.todo.widget.FlowGlassWidgetProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -80,6 +84,8 @@ data class FlowUiState(
     val completedTodayCount: Int = 0,
     val totalTodayTargetCount: Int = 0,
     val isQuickCaptureOpen: Boolean = false,
+    val quickCaptureInitialTitle: String = "",
+    val quickCaptureAutoVoice: Boolean = false,
     val isSettingsOpen: Boolean = false,
     val accessibility: AccessibilityPreferences = AccessibilityPreferences(),
     val dailyProgress: Float = 0f,
@@ -87,7 +93,9 @@ data class FlowUiState(
     val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
     val lastSyncedSystemColorHex: String? = null,
     val cloudSyncState: CloudSyncState = CloudSyncState(),
-    val contributionChart: ContributionChartSummary = ContributionChartSummary()
+    val contributionChart: ContributionChartSummary = ContributionChartSummary(),
+    val activeShieldAlert: AppUsageShieldAlert? = null,
+    val shieldAlerts: List<AppUsageShieldAlert> = emptyList()
 )
 
 class FlowViewModel(
@@ -95,12 +103,16 @@ class FlowViewModel(
     private val healthConnectManager: HealthConnectManager? = null,
     private val shizukuManager: ShizukuSystemColorManager? = null,
     private val appUsageManager: AppUsageManager? = null,
-    private val firestoreSyncManager: FirestoreSyncManager? = null
+    private val firestoreSyncManager: FirestoreSyncManager? = null,
+    private val appUsageShieldMonitor: AppUsageShieldMonitor? = null,
+    private val appContext: android.content.Context? = null
 ) : ViewModel() {
 
     private data class LocalUiFlags(
         val selectedTab: FlowTab = FlowTab.INBOX,
         val isQuickCaptureOpen: Boolean = false,
+        val quickCaptureInitialTitle: String = "",
+        val quickCaptureAutoVoice: Boolean = false,
         val isSettingsOpen: Boolean = false,
         val isGoalCreatorOpen: Boolean = false,
         val disabledGoalIds: Set<String> = emptySet()
@@ -117,7 +129,9 @@ class FlowViewModel(
     private data class SystemHealthState(
         val healthSnapshot: HealthDailySnapshot = HealthDailySnapshot(),
         val shizukuStatus: ShizukuStatus = ShizukuStatus.NOT_INSTALLED,
-        val lastAppliedHex: String? = null
+        val lastAppliedHex: String? = null,
+        val activeShieldAlert: AppUsageShieldAlert? = null,
+        val shieldAlerts: List<AppUsageShieldAlert> = emptyList()
     )
 
     private data class DailyRecordSnapshot(
@@ -145,6 +159,12 @@ class FlowViewModel(
     private val cloudSyncFlow: Flow<CloudSyncState> =
         firestoreSyncManager?.state ?: MutableStateFlow(CloudSyncState())
 
+    private val activeShieldAlertFlow: Flow<AppUsageShieldAlert?> =
+        appUsageShieldMonitor?.activeBannerAlert ?: MutableStateFlow(null)
+
+    private val shieldAlertsFlow: Flow<List<AppUsageShieldAlert>> =
+        appUsageShieldMonitor?.alerts ?: MutableStateFlow(emptyList())
+
     private val domainDataFlow: Flow<RepositoryDomainData> = combine(
         repository.observeTasks(),
         repository.observeProjects(),
@@ -164,12 +184,16 @@ class FlowViewModel(
     private val systemHealthFlow: Flow<SystemHealthState> = combine(
         healthSnapshotFlow,
         shizukuStatusFlow,
-        lastAppliedHexFlow
-    ) { health, shizuku, hex ->
+        lastAppliedHexFlow,
+        activeShieldAlertFlow,
+        shieldAlertsFlow
+    ) { health, shizuku, hex, activeShield, allShields ->
         SystemHealthState(
             healthSnapshot = health,
             shizukuStatus = shizuku,
-            lastAppliedHex = hex
+            lastAppliedHex = hex,
+            activeShieldAlert = activeShield,
+            shieldAlerts = allShields
         )
     }
 
@@ -340,6 +364,8 @@ class FlowViewModel(
             completedTodayCount = completedTodayCount,
             totalTodayTargetCount = totalTodayTargetCount,
             isQuickCaptureOpen = flags.isQuickCaptureOpen,
+            quickCaptureInitialTitle = flags.quickCaptureInitialTitle,
+            quickCaptureAutoVoice = flags.quickCaptureAutoVoice,
             isSettingsOpen = flags.isSettingsOpen,
             accessibility = accessibility,
             dailyProgress = effectiveDailyProgress,
@@ -347,7 +373,9 @@ class FlowViewModel(
             shizukuStatus = sysHealth.shizukuStatus,
             lastSyncedSystemColorHex = sysHealth.lastAppliedHex,
             cloudSyncState = cloudSync,
-            contributionChart = contributionChart
+            contributionChart = contributionChart,
+            activeShieldAlert = sysHealth.activeShieldAlert,
+            shieldAlerts = sysHealth.shieldAlerts
         )
     }.stateIn(
         scope = viewModelScope,
@@ -412,6 +440,42 @@ class FlowViewModel(
                     repository.upsertDailyHistory(record)
                     firestoreSyncManager?.pushDailyHistory(record)
                 }
+        }
+
+        // Monitor App Usage Shield 80% & 100% Limits and Sync Home Screen Glass Widget & Quick Settings Tile
+        viewModelScope.launch {
+            uiState.collect { state ->
+                appUsageShieldMonitor?.evaluateGoals(
+                    evaluatedGoals = state.evaluatedGoals,
+                    shieldEnabled = state.accessibility.enableAppUsageShield
+                )
+
+                val ctx = appContext
+                if (ctx != null) {
+                    val topUncompleted = state.todayTasks.firstOrNull { !it.isCompleted }
+                        ?: state.nextActionTasks.firstOrNull { !it.isCompleted }
+                        ?: state.inboxTasks.firstOrNull { !it.isCompleted }
+
+                    val recentLevels = state.contributionChart.cells
+                        .filter { !it.isFuture }
+                        .takeLast(84)
+                        .map { it.combinedLevel }
+
+                    FlowGlassWidgetProvider.saveWidgetSnapshotAndRefresh(
+                        context = ctx,
+                        momentumProgress = state.dailyProgress,
+                        completedToday = state.completedTodayCount,
+                        totalToday = state.totalTodayTargetCount,
+                        completedGoals = state.completedGoalsCount,
+                        totalGoals = state.totalGoalsCount,
+                        streakDays = state.contributionChart.currentStreakDays,
+                        topTaskId = topUncompleted?.id,
+                        topTaskTitle = topUncompleted?.title,
+                        recentHeatmapLevels = recentLevels,
+                        stopHexes = state.accessibility.momentumStopHexes
+                    )
+                }
+            }
         }
     }
 
@@ -707,7 +771,35 @@ class FlowViewModel(
     }
 
     fun setQuickCaptureOpen(open: Boolean) {
-        _localFlags.update { it.copy(isQuickCaptureOpen = open) }
+        _localFlags.update {
+            if (open) {
+                it.copy(isQuickCaptureOpen = true)
+            } else {
+                it.copy(
+                    isQuickCaptureOpen = false,
+                    quickCaptureInitialTitle = "",
+                    quickCaptureAutoVoice = false
+                )
+            }
+        }
+    }
+
+    fun openQuickCaptureWithDraft(initialTitle: String = "", autoStartVoice: Boolean = false) {
+        _localFlags.update {
+            it.copy(
+                isQuickCaptureOpen = true,
+                quickCaptureInitialTitle = initialTitle,
+                quickCaptureAutoVoice = autoStartVoice
+            )
+        }
+    }
+
+    fun dismissShieldAlert(goalId: String) {
+        appUsageShieldMonitor?.dismissBannerAlert(goalId)
+    }
+
+    fun triggerTestShieldNudge() {
+        appUsageShieldMonitor?.triggerTestShieldNudge(uiState.value.evaluatedGoals)
     }
 
     fun setSettingsOpen(open: Boolean) {
@@ -778,7 +870,8 @@ class FlowViewModel(
         projectId: String? = null,
         isFlagged: Boolean = false,
         recurrenceRule: RecurrenceRule? = null,
-        healthGoal: HealthGoalSpec? = null
+        healthGoal: HealthGoalSpec? = null,
+        subtasks: List<SubtaskItem> = emptyList()
     ) {
         if (title.isBlank()) return
         val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
@@ -804,12 +897,46 @@ class FlowViewModel(
             isCompleted = false,
             recurrenceRule = if (hasRecurrence) recurrenceRule else null,
             healthGoal = healthGoal,
+            subtasks = subtasks,
             createdAt = System.currentTimeMillis(),
             completedAt = null
         )
         viewModelScope.launch {
             repository.upsertTask(newTask)
             firestoreSyncManager?.pushTask(newTask)
+        }
+    }
+
+    fun toggleSubtaskCompletion(taskId: String, subtaskId: String) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val updatedSubtasks = task.subtasks.map { sub ->
+            if (sub.id == subtaskId) sub.copy(isCompleted = !sub.isCompleted) else sub
+        }
+        val updatedTask = task.copy(subtasks = updatedSubtasks)
+        viewModelScope.launch {
+            repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
+        }
+    }
+
+    fun addSubtask(taskId: String, subtaskTitle: String) {
+        val trimmed = subtaskTitle.trim()
+        if (trimmed.isBlank()) return
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val newSubtask = SubtaskItem(title = trimmed, isCompleted = false)
+        val updatedTask = task.copy(subtasks = task.subtasks + newSubtask)
+        viewModelScope.launch {
+            repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
+        }
+    }
+
+    fun deleteSubtask(taskId: String, subtaskId: String) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val updatedTask = task.copy(subtasks = task.subtasks.filterNot { it.id == subtaskId })
+        viewModelScope.launch {
+            repository.upsertTask(updatedTask)
+            firestoreSyncManager?.pushTask(updatedTask)
         }
     }
 
@@ -895,6 +1022,7 @@ class FlowViewModel(
                     bucket = GtdBucket.SCHEDULED,
                     dueDateEpochDay = nextDueEpochDay,
                     isCompleted = false,
+                    subtasks = task.subtasks.map { it.copy(isCompleted = false) },
                     recurrenceRule = rule,
                     createdAt = nowMillis,
                     completedAt = null
@@ -1076,7 +1204,9 @@ class FlowViewModel(
             healthConnectManager: HealthConnectManager? = null,
             shizukuManager: ShizukuSystemColorManager? = null,
             appUsageManager: AppUsageManager? = null,
-            firestoreSyncManager: FirestoreSyncManager? = null
+            firestoreSyncManager: FirestoreSyncManager? = null,
+            appUsageShieldMonitor: AppUsageShieldMonitor? = null,
+            appContext: android.content.Context? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1087,7 +1217,9 @@ class FlowViewModel(
                             healthConnectManager = healthConnectManager,
                             shizukuManager = shizukuManager,
                             appUsageManager = appUsageManager,
-                            firestoreSyncManager = firestoreSyncManager
+                            firestoreSyncManager = firestoreSyncManager,
+                            appUsageShieldMonitor = appUsageShieldMonitor,
+                            appContext = appContext
                         ) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

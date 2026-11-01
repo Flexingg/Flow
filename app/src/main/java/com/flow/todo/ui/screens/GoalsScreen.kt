@@ -80,6 +80,7 @@ import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidGoalMeterCard
 import com.flow.todo.ui.components.FluidInsetCard
 import com.flow.todo.ui.components.FluidPillButton
+import com.flow.todo.ui.components.FluidStretchySwitch
 import com.flow.todo.ui.theme.FluidShapes
 import com.flow.todo.ui.theme.FluidSpacing
 import com.flow.todo.ui.theme.FluidSprings
@@ -114,6 +115,9 @@ fun GoalsScreen(
     shizukuStatus: ShizukuStatus,
     syncSystemColorsWithShizuku: Boolean,
     contributionChart: ContributionChartSummary = ContributionChartSummary(),
+    enableAppUsageShield: Boolean = true,
+    onToggleAppUsageShield: (Boolean) -> Unit = {},
+    onTestUsageShield: () -> Unit = {},
     onOpenGoalCreator: () -> Unit,
     onDeleteGoal: (String) -> Unit,
     onAddPresetGoal: (
@@ -716,6 +720,51 @@ fun GoalsScreen(
                                 onClick = onRequestUsagePermission,
                                 leadingIcon = Icons.Rounded.Timer,
                                 accentColor = MomentumSpectrum.Purple
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // Active App Usage Shield & Gentle Liquid-Glass Nudge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Active App Usage Shield 🛡️",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = "Gentle Liquid-Glass nudge at 80% & Shield alert at 100% of daily app limits",
+                                fontSize = 11.sp,
+                                color = colors.textSecondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FluidFilterChip(
+                                label = "Test Shield",
+                                selected = false,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onTestUsageShield()
+                                },
+                                leadingIcon = Icons.Rounded.Security,
+                                accentColor = MomentumSpectrum.Yellow
+                            )
+                            FluidStretchySwitch(
+                                checked = enableAppUsageShield,
+                                onCheckedChange = onToggleAppUsageShield
                             )
                         }
                     }

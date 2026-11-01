@@ -13,6 +13,7 @@ import com.flow.todo.domain.model.HealthGoalSpec
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
+import com.flow.todo.domain.model.SubtaskItem
 import com.flow.todo.domain.model.TaskItem
 
 @Entity(tableName = "projects")
@@ -35,6 +36,7 @@ data class TaskEntity(
     val isCompleted: Boolean,
     val recurrenceRuleRaw: String? = null,
     val healthGoalRaw: String? = null,
+    val subtasksRaw: String? = null,
     val createdAt: Long,
     val completedAt: Long?
 )
@@ -90,6 +92,7 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     isCompleted = isCompleted,
     recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
     healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
+    subtasks = SubtaskItem.listFromStorageString(subtasksRaw),
     createdAt = createdAt,
     completedAt = completedAt
 )
@@ -105,6 +108,7 @@ fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     isCompleted = isCompleted,
     recurrenceRuleRaw = recurrenceRule?.toStorageString(),
     healthGoalRaw = healthGoal?.toStorageString(),
+    subtasksRaw = SubtaskItem.listToStorageString(subtasks),
     createdAt = createdAt,
     completedAt = completedAt
 )
