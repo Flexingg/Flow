@@ -89,21 +89,21 @@ object MomentumSpectrum {
     val Yellow = Color(0xFFFFB800)
     val Green = Color(0xFF22B35E)
 
-    private var _stopHexes by androidx.compose.runtime.mutableStateOf(
+    private val _stopHexes = androidx.compose.runtime.mutableStateOf(
         com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
     )
 
     val stopHexes: List<Long>
-        get() = _stopHexes
+        get() = _stopHexes.value
 
     val stops: List<Color>
-        get() = _stopHexes.map { Color(it) }.ifEmpty {
+        get() = _stopHexes.value.map { Color(it) }.ifEmpty {
             listOf(Red, Purple, Blue, Yellow, Green)
         }
 
     fun updateStopHexes(hexes: List<Long>) {
-        if (hexes.size >= 2 && hexes != _stopHexes) {
-            _stopHexes = hexes
+        if (hexes.size >= 2 && hexes != _stopHexes.value) {
+            _stopHexes.value = hexes
         }
     }
 
@@ -126,7 +126,7 @@ object MomentumSpectrum {
 
     fun stageLabel(progress: Float): String {
         val p = progress.coerceIn(0f, 1f)
-        val currentHexes = _stopHexes.takeIf { it.size >= 5 }
+        val currentHexes = _stopHexes.value.takeIf { it.size >= 5 }
             ?: com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
         return when {
             p < 0.20f -> "Warming Up • ${colorNameForHex(currentHexes[0])}"
