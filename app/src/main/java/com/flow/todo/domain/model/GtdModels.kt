@@ -485,6 +485,9 @@ data class FocusSessionState(
             val secs = remainingSeconds % 60
             return String.format(Locale.US, "%02d:%02d", mins, secs)
         }
+
+    val formattedRemaining: String
+        get() = formattedRemainingTime
 }
 
 /**
@@ -536,6 +539,11 @@ data class ParsedTaskDraft(
 /**
  * Daily Rituals: Morning "Wake to Flow" and Evening "Sunset Review"
  */
+enum class DailyRitualType {
+    MORNING_WAKE,
+    EVENING_SUNSET
+}
+
 data class DailyRitualState(
     val isMorningOpen: Boolean = false,
     val isEveningOpen: Boolean = false,

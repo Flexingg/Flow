@@ -1,3 +1,5 @@
+package com.flow.todo.domain.nlp
+
 import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.ParsedTaskDraft
