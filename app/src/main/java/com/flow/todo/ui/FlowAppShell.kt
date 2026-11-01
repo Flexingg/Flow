@@ -395,7 +395,7 @@ fun FlowAppShell(
                 alert = uiState.activeShieldAlert,
                 onDismiss = viewModel::dismissShieldAlert,
                 onOpenGoals = {
-                    viewModel.dismissShieldAlert()
+                    uiState.activeShieldAlert?.let { viewModel.dismissShieldAlert(it.goalId) }
                     viewModel.selectTab(FlowTab.GOALS)
                 },
                 modifier = Modifier
