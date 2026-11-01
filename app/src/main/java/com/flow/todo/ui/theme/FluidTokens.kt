@@ -89,24 +89,51 @@ object MomentumSpectrum {
     val Yellow = Color(0xFFFFB800)
     val Green = Color(0xFF22B35E)
 
-    val stops: List<Color> = listOf(Red, Purple, Blue, Yellow, Green)
+    private var _stopHexes by androidx.compose.runtime.mutableStateOf(
+        com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
+    )
+
+    val stopHexes: List<Long>
+        get() = _stopHexes
+
+    val stops: List<Color>
+        get() = _stopHexes.map { Color(it) }.ifEmpty {
+            listOf(Red, Purple, Blue, Yellow, Green)
+        }
+
+    fun updateStopHexes(hexes: List<Long>) {
+        if (hexes.size >= 2 && hexes != _stopHexes) {
+            _stopHexes = hexes
+        }
+    }
+
+    fun colorNameForHex(hex: Long): String {
+        val match = com.flow.todo.domain.model.MOMENTUM_COLOR_SWATCHES.firstOrNull {
+            (it.second and 0xFFFFFFL) == (hex and 0xFFFFFFL)
+        }
+        if (match != null) return match.first
+        return String.format(java.util.Locale.US, "#%06X", hex and 0xFFFFFFL)
+    }
 
     fun colorForProgress(progress: Float): Color {
+        val currentStops = stops
         val clamped = progress.coerceIn(0f, 1f)
-        val scaled = clamped * (stops.size - 1)
-        val index = scaled.toInt().coerceIn(0, stops.size - 2)
+        val scaled = clamped * (currentStops.size - 1)
+        val index = scaled.toInt().coerceIn(0, currentStops.size - 2)
         val fraction = scaled - index
-        return androidx.compose.ui.graphics.lerp(stops[index], stops[index + 1], fraction)
+        return androidx.compose.ui.graphics.lerp(currentStops[index], currentStops[index + 1], fraction)
     }
 
     fun stageLabel(progress: Float): String {
         val p = progress.coerceIn(0f, 1f)
+        val currentHexes = _stopHexes.takeIf { it.size >= 5 }
+            ?: com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
         return when {
-            p < 0.20f -> "Warming Up • Crimson"
-            p < 0.45f -> "Building Spark • Purple"
-            p < 0.70f -> "In The Flow • Cobalt Blue"
-            p < 0.95f -> "Final Surge • Solar Gold"
-            else -> "Flow Complete • Emerald"
+            p < 0.20f -> "Warming Up • ${colorNameForHex(currentHexes[0])}"
+            p < 0.45f -> "Building Spark • ${colorNameForHex(currentHexes[1])}"
+            p < 0.70f -> "In The Flow • ${colorNameForHex(currentHexes[2])}"
+            p < 0.95f -> "Final Surge • ${colorNameForHex(currentHexes[3])}"
+            else -> "Flow Complete • ${colorNameForHex(currentHexes[4])}"
         }
     }
 

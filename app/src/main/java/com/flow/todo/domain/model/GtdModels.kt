@@ -218,12 +218,19 @@ enum class HealthMetricType(
     val label: String,
     val unit: String,
     val defaultTarget: Double,
-    val presetTargets: List<Double>
+    val presetTargets: List<Double>,
+    val isMacronutrient: Boolean = false
 ) {
     STEPS("Steps", "steps", 10000.0, listOf(5000.0, 8000.0, 10000.0, 12000.0, 15000.0)),
     ACTIVE_CALORIES("Active Calories", "kcal", 500.0, listOf(300.0, 450.0, 600.0, 800.0)),
     EXERCISE_MINUTES("Exercise Time", "min", 30.0, listOf(20.0, 30.0, 45.0, 60.0)),
     SLEEP_HOURS("Sleep Duration", "hrs", 7.5, listOf(6.5, 7.0, 7.5, 8.0, 8.5)),
+    PROTEIN_GRAMS("Protein", "g", 150.0, listOf(80.0, 120.0, 150.0, 180.0, 220.0), isMacronutrient = true),
+    CARBS_GRAMS("Carbohydrates", "g", 220.0, listOf(50.0, 100.0, 150.0, 220.0, 300.0), isMacronutrient = true),
+    FAT_GRAMS("Total Fat", "g", 65.0, listOf(40.0, 55.0, 65.0, 80.0, 100.0), isMacronutrient = true),
+    DIETARY_CALORIES("Nutrition Calories", "kcal", 2000.0, listOf(1500.0, 1800.0, 2000.0, 2400.0, 2800.0), isMacronutrient = true),
+    FIBER_GRAMS("Dietary Fiber", "g", 30.0, listOf(20.0, 25.0, 30.0, 38.0, 45.0), isMacronutrient = true),
+    SUGAR_GRAMS("Sugar", "g", 30.0, listOf(15.0, 25.0, 30.0, 50.0), isMacronutrient = true),
     DISTANCE_KM("Distance", "km", 5.0, listOf(3.0, 5.0, 8.0, 10.0)),
     HYDRATION_LITERS("Hydration", "L", 2.5, listOf(1.5, 2.0, 2.5, 3.0, 3.5)),
     FLOORS_CLIMBED("Floors Climbed", "floors", 10.0, listOf(5.0, 10.0, 15.0, 20.0)),
@@ -232,7 +239,8 @@ enum class HealthMetricType(
 
     fun formatValue(value: Double): String {
         return when (this) {
-            STEPS, ACTIVE_CALORIES, EXERCISE_MINUTES, FLOORS_CLIMBED, RESTING_HEART_RATE ->
+            STEPS, ACTIVE_CALORIES, EXERCISE_MINUTES, FLOORS_CLIMBED, RESTING_HEART_RATE,
+            PROTEIN_GRAMS, CARBS_GRAMS, FAT_GRAMS, DIETARY_CALORIES, FIBER_GRAMS, SUGAR_GRAMS ->
                 String.format(Locale.US, "%,d", value.toLong())
             SLEEP_HOURS, DISTANCE_KM, HYDRATION_LITERS, WEIGHT_KG ->
                 String.format(Locale.US, "%.1f", value)
@@ -419,12 +427,74 @@ data class ProjectWithStats(
         get() = if (totalCount == 0) 0f else completedCount.toFloat() / totalCount.toFloat()
 }
 
+data class MomentumPalettePreset(
+    val name: String,
+    val subtitle: String,
+    val stopsHex: List<Long>
+)
+
+val DEFAULT_MOMENTUM_STOPS_HEX: List<Long> = listOf(
+    0xFFFF3B5CL, // 0% Start: Crimson Red
+    0xFFAF52DEL, // 25% Spark: Vivid Purple
+    0xFF2F6BFFL, // 50% Flow: Cobalt Blue
+    0xFFFFB800L, // 75% Surge: Solar Gold
+    0xFF22B35EL  // 100% Complete: Emerald Green
+)
+
+val MOMENTUM_COLOR_SWATCHES: List<Pair<String, Long>> = listOf(
+    "Crimson" to 0xFFFF3B5CL,
+    "Hot Pink" to 0xFFFF2D55L,
+    "Rose" to 0xFFFF6482L,
+    "Coral" to 0xFFFF6B4AL,
+    "Sunset Orange" to 0xFFFF9500L,
+    "Solar Gold" to 0xFFFFB800L,
+    "Electric Lime" to 0xFFA8E000L,
+    "Emerald" to 0xFF22B35EL,
+    "Mint Teal" to 0xFF00C7BEL,
+    "Aqua Cyan" to 0xFF00D2FFL,
+    "Sky Blue" to 0xFF32ADE6L,
+    "Cobalt Blue" to 0xFF2F6BFFL,
+    "Royal Indigo" to 0xFF5856D6L,
+    "Vivid Purple" to 0xFFAF52DEL,
+    "Neon Violet" to 0xFFBF5AF2L,
+    "Lavender" to 0xFFD4A5FFL
+)
+
+val MOMENTUM_PALETTE_PRESETS: List<MomentumPalettePreset> = listOf(
+    MomentumPalettePreset(
+        name = "Classic Flow",
+        subtitle = "Red → Purple → Blue → Gold → Green",
+        stopsHex = DEFAULT_MOMENTUM_STOPS_HEX
+    ),
+    MomentumPalettePreset(
+        name = "Oceanic Tide",
+        subtitle = "Indigo → Cobalt → Sky → Cyan → Mint",
+        stopsHex = listOf(0xFF5856D6L, 0xFF2F6BFFL, 0xFF32ADE6L, 0xFF00D2FFL, 0xFF00C7BEL)
+    ),
+    MomentumPalettePreset(
+        name = "Sunset Ember",
+        subtitle = "Pink → Purple → Coral → Orange → Gold",
+        stopsHex = listOf(0xFFFF2D55L, 0xFFAF52DEL, 0xFFFF6B4AL, 0xFFFF9500L, 0xFFFFB800L)
+    ),
+    MomentumPalettePreset(
+        name = "Cyber Neon",
+        subtitle = "Hot Pink → Violet → Cobalt → Lime → Cyan",
+        stopsHex = listOf(0xFFFF2D55L, 0xFFBF5AF2L, 0xFF2F6BFFL, 0xFFA8E000L, 0xFF00D2FFL)
+    ),
+    MomentumPalettePreset(
+        name = "Botanical Zen",
+        subtitle = "Coral → Gold → Lime → Emerald → Mint",
+        stopsHex = listOf(0xFFFF6B4AL, 0xFFFFB800L, 0xFFA8E000L, 0xFF22B35EL, 0xFF00C7BEL)
+    )
+)
+
 data class AccessibilityPreferences(
     val reduceTransparency: Boolean = false,
     val reduceMotion: Boolean = false,
     val increasedContrast: Boolean = false,
     val darkThemeOverride: Boolean? = null, // null = follow system, true = dark, false = light
     val useDynamicColor: Boolean = true,
-    val useMomentumColorSpectrum: Boolean = true, // Red -> Purple -> Blue -> Yellow -> Green based on goals
-    val syncSystemColorsWithShizuku: Boolean = false // Sync Android System UI Material You seed color via Shizuku
+    val useMomentumColorSpectrum: Boolean = true, // Morph across momentumStopHexes based on goals
+    val syncSystemColorsWithShizuku: Boolean = false, // Sync Android System UI Material You seed color via Shizuku
+    val momentumStopHexes: List<Long> = DEFAULT_MOMENTUM_STOPS_HEX
 )

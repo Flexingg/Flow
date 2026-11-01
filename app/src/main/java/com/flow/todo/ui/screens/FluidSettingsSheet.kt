@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Palette
@@ -43,11 +48,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.AccessibilityPreferences
+import com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
 import com.flow.todo.domain.model.HealthDailySnapshot
+import com.flow.todo.domain.model.MOMENTUM_COLOR_SWATCHES
+import com.flow.todo.domain.model.MOMENTUM_PALETTE_PRESETS
 import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidInsetCard
@@ -80,6 +92,13 @@ fun FluidSettingsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isReducedMotion = FluidTheme.isReducedMotion
+    val haptic = LocalHapticFeedback.current
+
+    val currentStopHexes = preferences.momentumStopHexes.takeIf { it.size == 5 } ?: DEFAULT_MOMENTUM_STOPS_HEX
+    var selectedStageIndex by remember { mutableStateOf(0) }
+    var customHexInput by remember(selectedStageIndex, currentStopHexes[selectedStageIndex]) {
+        mutableStateOf(String.format(java.util.Locale.US, "#%06X", currentStopHexes[selectedStageIndex] and 0xFFFFFFL))
+    }
 
     // Bouncy entrance animation for sheet container
     var sheetVisible by remember { mutableStateOf(false) }
@@ -334,14 +353,14 @@ fun FluidSettingsSheet(
 
                     Spacer(modifier = Modifier.height(FluidSpacing.md))
 
-                    // Visual 5-stage spectrum bar showing Red -> Purple -> Blue -> Yellow -> Green with active stage highlighted
-                    val stages = listOf(
-                        Triple("Red", Color(0xFFFF3B5C), "#FF3B5C"),
-                        Triple("Purple", Color(0xFFAF52DE), "#AF52DE"),
-                        Triple("Blue", Color(0xFF2F6BFF), "#2F6BFF"),
-                        Triple("Yellow", Color(0xFFFFB800), "#FFB800"),
-                        Triple("Green", Color(0xFF22B35E), "#22B35E")
-                    )
+                    // Visual 5-stage spectrum bar showing custom or default stops with active stage highlighted
+                    val stages = currentStopHexes.map { hex ->
+                        Triple(
+                            MomentumSpectrum.colorNameForHex(hex),
+                            Color(hex),
+                            String.format(java.util.Locale.US, "#%06X", hex and 0xFFFFFFL)
+                        )
+                    }
                     val activeIndex = when {
                         dailyProgress >= 0.80f -> 4
                         dailyProgress >= 0.60f -> 3
@@ -403,6 +422,273 @@ fun FluidSettingsSheet(
                                 }
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // 5-STAGE PROGRESS COLOR PICKER
+                    // Header with Reset Default
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "CUSTOMIZE PROGRESS COLORS (TAP A STAGE)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = FluidTheme.colors.textTertiary
+                        )
+
+                        Text(
+                            text = "Reset Default",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = FluidTheme.colors.accent,
+                            modifier = Modifier
+                                .clip(FluidShapes.xs)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onUpdatePreferences { it.copy(momentumStopHexes = DEFAULT_MOMENTUM_STOPS_HEX) }
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                    // 5 Interactive Stage Selector Pills/Orbs (0% Start, 25% Spark, 50% Flow, 75% Surge, 100% Complete)
+                    val stageNames = listOf("Start", "Spark", "Flow", "Surge", "Complete")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        (0..4).forEach { idx ->
+                            val isSelected = selectedStageIndex == idx
+                            val stageColor = Color(currentStopHexes[idx])
+                            val stagePercent = "${idx * 25}%"
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(FluidShapes.md)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedStageIndex = idx
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (isSelected) 36.dp else 28.dp)
+                                        .then(
+                                            if (isSelected) Modifier.shadow(8.dp, CircleShape, spotColor = stageColor)
+                                            else Modifier
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.5.dp else 1.dp,
+                                            color = if (isSelected) stageColor else FluidTheme.colors.divider,
+                                            shape = CircleShape
+                                        )
+                                        .padding(if (isSelected) 3.dp else 2.dp)
+                                        .clip(CircleShape)
+                                        .background(stageColor),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = stagePercent,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) stageColor else FluidTheme.colors.textSecondary
+                                )
+                                Text(
+                                    text = stageNames[idx],
+                                    fontSize = 9.sp,
+                                    color = if (isSelected) FluidTheme.colors.textPrimary else FluidTheme.colors.textTertiary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // 1-Tap Spectrum Theme Presets Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MOMENTUM_PALETTE_PRESETS.forEach { preset ->
+                            val isPresetActive = currentStopHexes == preset.stopsHex
+                            FluidFilterChip(
+                                label = preset.name,
+                                selected = isPresetActive,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onUpdatePreferences { it.copy(momentumStopHexes = preset.stopsHex) }
+                                },
+                                accentColor = Color(preset.stopsHex.first())
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                    // 16-Swatch Color Grid for Selected Stage
+                    Text(
+                        text = "Pick color for Stage ${selectedStageIndex + 1} (${selectedStageIndex * 25}%): ${MomentumSpectrum.colorNameForHex(currentStopHexes[selectedStageIndex])}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = FluidTheme.colors.textSecondary,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MOMENTUM_COLOR_SWATCHES.chunked(8).forEach { swatchRow ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                swatchRow.forEach { (name, swatchHex) ->
+                                    val swatchColor = Color(swatchHex)
+                                    val isSelected = (currentStopHexes[selectedStageIndex] and 0xFFFFFFL) == (swatchHex and 0xFFFFFFL)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .then(
+                                                if (isSelected) Modifier.shadow(6.dp, CircleShape, spotColor = swatchColor)
+                                                else Modifier
+                                            )
+                                            .clip(CircleShape)
+                                            .background(swatchColor)
+                                            .border(
+                                                width = if (isSelected) 2.5.dp else 1.dp,
+                                                color = if (isSelected) Color.White else FluidTheme.colors.divider.copy(alpha = 0.5f),
+                                                shape = CircleShape
+                                            )
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                val updatedList = currentStopHexes.toMutableList().apply {
+                                                    this[selectedStageIndex] = swatchHex
+                                                }
+                                                onUpdatePreferences { it.copy(momentumStopHexes = updatedList) }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = name,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                    // Custom Hex Code Input (#RRGGBB)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val parsedHex = customHexInput.removePrefix("#").trim().toLongOrNull(16)?.let {
+                            0xFF000000L or (it and 0xFFFFFFL)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clip(FluidShapes.sm)
+                                .background(if (FluidTheme.colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                .border(1.dp, FluidTheme.colors.divider, FluidShapes.sm)
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (parsedHex != null && customHexInput.removePrefix("#").trim().length == 6) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(parsedHex))
+                                            .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (customHexInput.isEmpty()) {
+                                        Text(
+                                            text = "#RRGGBB",
+                                            fontSize = 13.sp,
+                                            color = FluidTheme.colors.textTertiary
+                                        )
+                                    }
+                                    BasicTextField(
+                                        value = customHexInput,
+                                        onValueChange = { input ->
+                                            if (input.length <= 7) {
+                                                customHexInput = input.uppercase()
+                                            }
+                                        },
+                                        textStyle = TextStyle(
+                                            color = FluidTheme.colors.textPrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = FontFamily.Monospace
+                                        ),
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+
+                        FluidFilterChip(
+                            label = "Apply Hex",
+                            selected = false,
+                            onClick = {
+                                if (parsedHex != null) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    val updatedList = currentStopHexes.toMutableList().apply {
+                                        this[selectedStageIndex] = parsedHex
+                                    }
+                                    onUpdatePreferences { it.copy(momentumStopHexes = updatedList) }
+                                }
+                            },
+                            accentColor = if (parsedHex != null) Color(parsedHex) else FluidTheme.colors.accent
+                        )
                     }
 
                     HorizontalDivider(

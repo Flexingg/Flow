@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.AppUsageMetricType
@@ -90,7 +91,8 @@ import kotlin.math.roundToInt
 private enum class GoalFilterTab(val label: String) {
     ALL("All Goals"),
     TASK("Task Milestones"),
-    HEALTH("Health Connect"),
+    MACROS("Macros (P/C/F)"),
+    HEALTH("Health & Fitness"),
     APP("App Usage Limits")
 }
 
@@ -151,7 +153,12 @@ fun GoalsScreen(
         when (selectedFilter) {
             GoalFilterTab.ALL -> evaluatedGoals
             GoalFilterTab.TASK -> evaluatedGoals.filter { it.goal.category == GoalCategory.TASK_COMPLETION }
-            GoalFilterTab.HEALTH -> evaluatedGoals.filter { it.goal.category == GoalCategory.HEALTH_CONNECT }
+            GoalFilterTab.MACROS -> evaluatedGoals.filter {
+                it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient == true
+            }
+            GoalFilterTab.HEALTH -> evaluatedGoals.filter {
+                it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient != true
+            }
             GoalFilterTab.APP -> evaluatedGoals.filter { it.goal.category == GoalCategory.APP_USAGE }
         }
     }
@@ -333,8 +340,9 @@ fun GoalsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
+                            modifier = Modifier.weight(1f, fill = false),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             val spectrumDots = MomentumSpectrum.stops
                             val activeDotIndex = when {
@@ -364,51 +372,81 @@ fun GoalsScreen(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
 
                             Text(
                                 text = stageLabel,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = colors.textSecondary
+                                color = colors.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        // Shizuku pill chip
-                        val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
-                        val shizukuText = if (isSyncActive) "OS Sync: Active (#$seedHex)" else "OS UI Palette →"
-                        Box(
-                            modifier = Modifier
-                                .clip(FluidShapes.full)
-                                .background(
-                                    if (isSyncActive) colors.success.copy(alpha = 0.12f)
-                                    else colors.accent.copy(alpha = 0.10f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSyncActive) colors.success.copy(alpha = 0.28f)
-                                    else colors.accent.copy(alpha = 0.24f),
-                                    FluidShapes.full
-                                )
-                                .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            // Pick Colors pill button
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(colors.accent.copy(alpha = 0.10f))
+                                    .border(
+                                        1.dp,
+                                        colors.accent.copy(alpha = 0.24f),
+                                        FluidShapes.full
+                                    )
+                                    .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSyncActive) colors.success else colors.accent)
-                                )
                                 Text(
-                                    text = shizukuText,
+                                    text = "Pick Colors 🎨",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = if (isSyncActive) colors.success else colors.accent
+                                    color = colors.accent
                                 )
+                            }
+
+                            // Shizuku pill chip
+                            val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
+                            val shizukuText = if (isSyncActive) "OS Sync: Active (#$seedHex)" else "OS UI Palette →"
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(
+                                        if (isSyncActive) colors.success.copy(alpha = 0.12f)
+                                        else colors.accent.copy(alpha = 0.10f)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSyncActive) colors.success.copy(alpha = 0.28f)
+                                        else colors.accent.copy(alpha = 0.24f),
+                                        FluidShapes.full
+                                    )
+                                    .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isSyncActive) colors.success else colors.accent)
+                                    )
+                                    Text(
+                                        text = shizukuText,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isSyncActive) colors.success else colors.accent
+                                    )
+                                }
                             }
                         }
                     }
@@ -440,7 +478,12 @@ fun GoalsScreen(
                     val count = when (tab) {
                         GoalFilterTab.ALL -> evaluatedGoals.size
                         GoalFilterTab.TASK -> evaluatedGoals.count { it.goal.category == GoalCategory.TASK_COMPLETION }
-                        GoalFilterTab.HEALTH -> evaluatedGoals.count { it.goal.category == GoalCategory.HEALTH_CONNECT }
+                        GoalFilterTab.MACROS -> evaluatedGoals.count {
+                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient == true
+                        }
+                        GoalFilterTab.HEALTH -> evaluatedGoals.count {
+                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient != true
+                        }
                         GoalFilterTab.APP -> evaluatedGoals.count { it.goal.category == GoalCategory.APP_USAGE }
                     }
                     val label = "${tab.label} ($count)"
@@ -975,6 +1018,199 @@ fun GoalsScreen(
                             },
                             leadingIcon = Icons.Rounded.Favorite,
                             accentColor = MomentumSpectrum.Blue
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                    // Macronutrient Goals (Protein, Carbs, Fats)
+                    Text(
+                        text = "MACRONUTRIENT GOALS (PROTEIN, CARBS, FATS)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FluidFilterChip(
+                            label = "+ Protein ≥ 150 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Protein ≥ 150 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_LEAST,
+                                    150.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.PROTEIN_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Green
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Protein ≥ 180 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Protein ≥ 180 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_LEAST,
+                                    180.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.PROTEIN_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Green
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Carbs ≤ 150 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Carbohydrates ≤ 150 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_MOST,
+                                    150.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.CARBS_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Yellow
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Carbs ≥ 220 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Carbohydrates ≥ 220 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_LEAST,
+                                    220.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.CARBS_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Yellow
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Fat ≤ 65 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Total Fat ≤ 65 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_MOST,
+                                    65.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.FAT_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Purple
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Calories ≤ 2,000 kcal",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Nutrition Calories ≤ 2,000 kcal",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_MOST,
+                                    2000.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.DIETARY_CALORIES,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Red
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Fiber ≥ 30 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Dietary Fiber ≥ 30 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_LEAST,
+                                    30.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.FIBER_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Green
+                        )
+
+                        FluidFilterChip(
+                            label = "+ Sugar ≤ 25 g",
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAddPresetGoal(
+                                    "Sugar ≤ 25 g",
+                                    GoalCategory.HEALTH_CONNECT,
+                                    GoalComparison.AT_MOST,
+                                    25.0,
+                                    GoalPeriod.DAILY,
+                                    null,
+                                    HealthMetricType.SUGAR_GRAMS,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            },
+                            leadingIcon = Icons.Rounded.Favorite,
+                            accentColor = MomentumSpectrum.Red
                         )
                     }
                 }

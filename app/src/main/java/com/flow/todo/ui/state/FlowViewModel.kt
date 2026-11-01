@@ -787,6 +787,9 @@ class FlowViewModel(
     fun updateAccessibility(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {
         viewModelScope.launch {
             repository.updateAccessibilityPreferences(transform)
+            if (repository.accessibilityPreferences.value.syncSystemColorsWithShizuku) {
+                shizukuManager?.applyMomentumColorForProgress(uiState.value.dailyProgress, force = true)
+            }
         }
     }
 

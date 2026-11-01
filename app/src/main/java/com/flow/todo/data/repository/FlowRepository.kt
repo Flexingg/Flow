@@ -35,6 +35,15 @@ class FlowRepository(
             "LIGHT" -> false
             else -> null
         }
+        val stopsRaw = prefs.getString(KEY_MOMENTUM_STOP_HEXES, null)
+        val loadedStops = stopsRaw
+            ?.split(",")
+            ?.mapNotNull { it.trim().toLongOrNull(16) }
+            ?.takeIf { it.size == 5 }
+            ?: com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
+
+        com.flow.todo.ui.theme.MomentumSpectrum.updateStopHexes(loadedStops)
+
         return AccessibilityPreferences(
             reduceTransparency = prefs.getBoolean(KEY_REDUCE_TRANSPARENCY, false),
             reduceMotion = prefs.getBoolean(KEY_REDUCE_MOTION, false),
@@ -42,7 +51,8 @@ class FlowRepository(
             darkThemeOverride = darkThemeOverride,
             useDynamicColor = prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true),
             useMomentumColorSpectrum = prefs.getBoolean(KEY_USE_MOMENTUM_SPECTRUM, true),
-            syncSystemColorsWithShizuku = prefs.getBoolean(KEY_SYNC_SHIZUKU_COLORS, false)
+            syncSystemColorsWithShizuku = prefs.getBoolean(KEY_SYNC_SHIZUKU_COLORS, false),
+            momentumStopHexes = loadedStops
         )
     }
 
@@ -94,6 +104,7 @@ class FlowRepository(
 
     suspend fun updateAccessibilityPreferences(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {
         val updated = transform(_accessibilityPreferences.value)
+        com.flow.todo.ui.theme.MomentumSpectrum.updateStopHexes(updated.momentumStopHexes)
         _accessibilityPreferences.value = updated
         sharedPreferences?.edit()?.apply {
             putBoolean(KEY_REDUCE_TRANSPARENCY, updated.reduceTransparency)
@@ -102,6 +113,10 @@ class FlowRepository(
             putBoolean(KEY_USE_DYNAMIC_COLOR, updated.useDynamicColor)
             putBoolean(KEY_USE_MOMENTUM_SPECTRUM, updated.useMomentumColorSpectrum)
             putBoolean(KEY_SYNC_SHIZUKU_COLORS, updated.syncSystemColorsWithShizuku)
+            putString(
+                KEY_MOMENTUM_STOP_HEXES,
+                updated.momentumStopHexes.joinToString(",") { java.lang.Long.toHexString(it) }
+            )
             putString(
                 KEY_DARK_THEME_OVERRIDE,
                 when (updated.darkThemeOverride) {
@@ -123,5 +138,6 @@ class FlowRepository(
         private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
         private const val KEY_USE_MOMENTUM_SPECTRUM = "use_momentum_spectrum"
         private const val KEY_SYNC_SHIZUKU_COLORS = "sync_shizuku_colors"
+        private const val KEY_MOMENTUM_STOP_HEXES = "momentum_stop_hexes"
     }
 }

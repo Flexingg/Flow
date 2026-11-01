@@ -242,6 +242,7 @@ fun FluidTheme(
     dailyProgress: Float = 0.5f,
     content: @Composable () -> Unit
 ) {
+    MomentumSpectrum.updateStopHexes(preferences.momentumStopHexes)
     val context = LocalContext.current
     val systemReducedMotion = remember(context) {
         try {

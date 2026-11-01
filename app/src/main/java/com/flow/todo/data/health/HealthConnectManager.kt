@@ -195,11 +195,93 @@ class HealthConnectManager(private val context: Context) {
             response[HeartRateRecord.BPM_AVG]?.toDouble() ?: 0.0
         }.getOrDefault(0.0)
 
+        // Read Nutrition / Macronutrients (Protein, Carbs, Fat, Dietary Calories, Fiber, Sugar)
+        val nutritionRecords = runCatching {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = NutritionRecord::class,
+                    timeRangeFilter = todayTimeRange
+                )
+            ).records
+        }.getOrDefault(emptyList())
+
+        val proteinGrams = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.PROTEIN_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.PROTEIN_TOTAL]?.inGrams ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.protein?.inGrams ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
+        val carbsGrams = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL]?.inGrams ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.totalCarbohydrate?.inGrams ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
+        val fatGrams = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.TOTAL_FAT_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.TOTAL_FAT_TOTAL]?.inGrams ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.totalFat?.inGrams ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
+        val dietaryCalories = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.ENERGY_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.ENERGY_TOTAL]?.inKilocalories ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.energy?.inKilocalories ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
+        val fiberGrams = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.DIETARY_FIBER_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.DIETARY_FIBER_TOTAL]?.inGrams ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.dietaryFiber?.inGrams ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
+        val sugarGrams = runCatching {
+            val agg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(NutritionRecord.SUGAR_TOTAL),
+                    timeRangeFilter = todayTimeRange
+                )
+            )[NutritionRecord.SUGAR_TOTAL]?.inGrams ?: 0.0
+            val rawSum = nutritionRecords.sumOf { it.sugar?.inGrams ?: 0.0 }
+            maxOf(agg, rawSum)
+        }.getOrDefault(0.0)
+
         val metricsMap = mapOf(
             HealthMetricType.STEPS to steps,
             HealthMetricType.ACTIVE_CALORIES to activeCalories,
             HealthMetricType.EXERCISE_MINUTES to exerciseMinutes,
             HealthMetricType.SLEEP_HOURS to sleepHours,
+            HealthMetricType.PROTEIN_GRAMS to proteinGrams,
+            HealthMetricType.CARBS_GRAMS to carbsGrams,
+            HealthMetricType.FAT_GRAMS to fatGrams,
+            HealthMetricType.DIETARY_CALORIES to dietaryCalories,
+            HealthMetricType.FIBER_GRAMS to fiberGrams,
+            HealthMetricType.SUGAR_GRAMS to sugarGrams,
             HealthMetricType.DISTANCE_KM to distanceKm,
             HealthMetricType.HYDRATION_LITERS to hydrationLiters,
             HealthMetricType.FLOORS_CLIMBED to floorsClimbed,
@@ -214,7 +296,6 @@ class HealthConnectManager(private val context: Context) {
             metrics = metricsMap,
             lastSyncedMillis = System.currentTimeMillis()
         )
-
         _snapshot.value = updatedSnapshot
         updatedSnapshot
     }

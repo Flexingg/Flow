@@ -251,16 +251,7 @@ class ShizukuSystemColorManager(private val context: Context) {
         )
 
         fun computeMomentumHex(progress: Float): String {
-            val clamped = progress.coerceIn(0f, 1f)
-            val scaled = clamped * (STOPS.size - 1)
-            val index = scaled.toInt().coerceIn(0, STOPS.size - 2)
-            val fraction = scaled - index
-            val c1 = STOPS[index]
-            val c2 = STOPS[index + 1]
-            val r = (c1.first + fraction * (c2.first - c1.first)).roundToInt().coerceIn(0, 255)
-            val g = (c1.second + fraction * (c2.second - c1.second)).roundToInt().coerceIn(0, 255)
-            val b = (c1.third + fraction * (c2.third - c1.third)).roundToInt().coerceIn(0, 255)
-            return String.format(Locale.US, "%02X%02X%02X", r, g, b)
+            return com.flow.todo.ui.theme.MomentumSpectrum.seedHexForProgress(progress)
         }
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Timer
@@ -51,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -93,9 +95,23 @@ private val POPULAR_APP_PRESETS = listOf(
 )
 
 /**
+ * Local UI tabs for the Goal Creator Sheet:
+ * 1. Task Milestone (GTD task count)
+ * 2. Macronutrients (Protein, Carbs, Fat, Dietary Calories, Fiber, Sugar)
+ * 3. Health & Fitness (Steps, Active Calories, Sleep, Exercise, Hydration, Distance, etc.)
+ * 4. App Usage Limit (Active screen time, Launch count)
+ */
+private enum class CreatorTab {
+    TASK_MILESTONE,
+    MACRONUTRIENTS,
+    HEALTH_FITNESS,
+    APP_USAGE
+}
+
+/**
  * Living Flow Goal Creator Sheet:
- * Dedicated glass bottom sheet for creating Task Milestones, Health Connect biometric goals,
- * and App Usage screen-time/open limits.
+ * Dedicated glass bottom sheet for creating Task Milestones, Macronutrient targets,
+ * Health Connect biometric goals, and App Usage screen-time/open limits.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +142,8 @@ fun GoalCreatorSheet(
     val isReducedMotion = FluidTheme.isReducedMotion
     val haptic = LocalHapticFeedback.current
 
-    // Category selection
+    // Creator Tab selection (Task Milestone, Macronutrients, Health & Fitness, App Usage Limit)
+    var selectedTab by remember { mutableStateOf(CreatorTab.TASK_MILESTONE) }
     var selectedCategory by remember { mutableStateOf(GoalCategory.TASK_COMPLETION) }
 
     // Task Milestone configuration
@@ -136,27 +153,45 @@ fun GoalCreatorSheet(
     var taskTargetValue by remember { mutableDoubleStateOf(3.0) }
     var taskCustomTargetText by remember { mutableStateOf("3") }
 
-    // Health Connect configuration
+    // Health Connect configuration (Macronutrients & Biometrics)
     var selectedHealthMetric by remember { mutableStateOf(HealthMetricType.STEPS) }
     var healthComparison by remember { mutableStateOf(GoalComparison.AT_LEAST) }
     var healthTargetValue by remember { mutableDoubleStateOf(HealthMetricType.STEPS.defaultTarget) }
     var healthCustomTargetText by remember { mutableStateOf("10000") }
 
-    // App Usage configuration
-    val effectiveAppList = remember(installedApps) {
-        if (installedApps.isNotEmpty()) installedApps else POPULAR_APP_PRESETS
+    // App Usage configuration (Searchable grid)
+    val allAvailableApps = remember(installedApps) {
+        if (installedApps.isNotEmpty()) {
+            val installedPackages = installedApps.map { it.packageName }.toSet()
+            installedApps + POPULAR_APP_PRESETS.filter { it.packageName !in installedPackages }
+        } else {
+            POPULAR_APP_PRESETS
+        }
     }
     var selectedPackageName by remember {
-        mutableStateOf(effectiveAppList.firstOrNull()?.packageName ?: "com.instagram.android")
+        mutableStateOf(allAvailableApps.firstOrNull()?.packageName ?: "com.instagram.android")
     }
     var selectedAppName by remember {
-        mutableStateOf(effectiveAppList.firstOrNull()?.appName ?: "Instagram")
+        mutableStateOf(allAvailableApps.firstOrNull()?.appName ?: "Instagram")
     }
+    var appSearchQuery by remember { mutableStateOf("") }
     var appUsageMetric by remember { mutableStateOf(AppUsageMetricType.ACTIVE_MINUTES) }
     var appComparison by remember { mutableStateOf(GoalComparison.AT_MOST) }
     var appTargetValue by remember { mutableDoubleStateOf(30.0) }
     var appCustomTargetText by remember { mutableStateOf("30") }
-    var appSearchFilter by remember { mutableStateOf("") }
+
+    // Real-time filtered apps for the 2-column picker
+    val filteredApps = remember(allAvailableApps, appSearchQuery) {
+        val q = appSearchQuery.trim()
+        if (q.isEmpty()) {
+            allAvailableApps
+        } else {
+            allAvailableApps.filter {
+                it.appName.contains(q, ignoreCase = true) ||
+                    it.packageName.contains(q, ignoreCase = true)
+            }
+        }
+    }
 
     // Custom or auto-generated title
     var customTitle by remember { mutableStateOf("") }
@@ -165,6 +200,7 @@ fun GoalCreatorSheet(
     // Auto-generate title based on active configuration
     val autoGeneratedTitle = remember(
         selectedCategory,
+        selectedTab,
         taskPeriod,
         taskProjectId,
         taskComparison,
@@ -285,7 +321,7 @@ fun GoalCreatorSheet(
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
 
-                // 1. GOAL TYPE SELECTOR (Category)
+                // 1. GOAL TYPE SELECTOR (4 Bouncy Mode Chips)
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "GOAL CATEGORY",
@@ -301,31 +337,62 @@ fun GoalCreatorSheet(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // 1. Task Milestone
                         FluidFilterChip(
                             label = "Task Milestone",
-                            selected = selectedCategory == GoalCategory.TASK_COMPLETION,
+                            selected = selectedTab == CreatorTab.TASK_MILESTONE,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedTab = CreatorTab.TASK_MILESTONE
                                 selectedCategory = GoalCategory.TASK_COMPLETION
                             },
                             leadingIcon = Icons.Rounded.TaskAlt,
                             accentColor = MomentumSpectrum.Blue
                         )
+
+                        // 2. Macronutrients (Protein, Carbs, Fat, Calories, Fiber, Sugar)
                         FluidFilterChip(
-                            label = "Health Connect",
-                            selected = selectedCategory == GoalCategory.HEALTH_CONNECT,
+                            label = "Macros (Protein/Carbs/Fat)",
+                            selected = selectedTab == CreatorTab.MACRONUTRIENTS,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedTab = CreatorTab.MACRONUTRIENTS
                                 selectedCategory = GoalCategory.HEALTH_CONNECT
+                                if (!selectedHealthMetric.isMacronutrient) {
+                                    selectedHealthMetric = HealthMetricType.PROTEIN_GRAMS
+                                    healthTargetValue = HealthMetricType.PROTEIN_GRAMS.defaultTarget
+                                    healthCustomTargetText = HealthMetricType.PROTEIN_GRAMS.defaultTarget.toLong().toString()
+                                }
+                            },
+                            leadingIcon = Icons.Rounded.Restaurant,
+                            accentColor = MomentumSpectrum.Yellow
+                        )
+
+                        // 3. Health & Fitness (Steps, Sleep, Calories, Exercise, etc.)
+                        FluidFilterChip(
+                            label = "Health & Fitness",
+                            selected = selectedTab == CreatorTab.HEALTH_FITNESS,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedTab = CreatorTab.HEALTH_FITNESS
+                                selectedCategory = GoalCategory.HEALTH_CONNECT
+                                if (selectedHealthMetric.isMacronutrient) {
+                                    selectedHealthMetric = HealthMetricType.STEPS
+                                    healthTargetValue = HealthMetricType.STEPS.defaultTarget
+                                    healthCustomTargetText = HealthMetricType.STEPS.defaultTarget.toLong().toString()
+                                }
                             },
                             leadingIcon = Icons.Rounded.Favorite,
                             accentColor = MomentumSpectrum.Green
                         )
+
+                        // 4. App Usage Limit
                         FluidFilterChip(
                             label = "App Usage Limit",
-                            selected = selectedCategory == GoalCategory.APP_USAGE,
+                            selected = selectedTab == CreatorTab.APP_USAGE,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedTab = CreatorTab.APP_USAGE
                                 selectedCategory = GoalCategory.APP_USAGE
                             },
                             leadingIcon = Icons.Rounded.Timer,
@@ -336,9 +403,9 @@ fun GoalCreatorSheet(
 
                 Spacer(modifier = Modifier.height(FluidSpacing.md))
 
-                // 2. DYNAMIC CONFIGURATION BY CATEGORY
-                when (selectedCategory) {
-                    GoalCategory.TASK_COMPLETION -> {
+                // 2. DYNAMIC CONFIGURATION BY CREATOR TAB
+                when (selectedTab) {
+                    CreatorTab.TASK_MILESTONE -> {
                         // TASK MILESTONE CONFIGURATION
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -476,8 +543,185 @@ fun GoalCreatorSheet(
                         }
                     }
 
-                    GoalCategory.HEALTH_CONNECT -> {
-                        // HEALTH CONNECT BIOMETRIC CONFIGURATION
+                    CreatorTab.MACRONUTRIENTS -> {
+                        // MACRONUTRIENT GOAL CONFIGURATION (Protein, Carbs, Fat, Calories, Fiber, Sugar)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(FluidSpacing.sm)
+                        ) {
+                            if (!hasHealthPermissions) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(FluidShapes.md)
+                                        .background(MomentumSpectrum.Green.copy(alpha = 0.12f))
+                                        .border(1.dp, MomentumSpectrum.Green.copy(alpha = 0.30f), FluidShapes.md)
+                                        .fluidInteractive(
+                                            pressScale = 0.95f,
+                                            onClick = onRequestHealthPermissions
+                                        )
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Security,
+                                            contentDescription = null,
+                                            tint = MomentumSpectrum.Green,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Grant Health Connect Access",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = colors.textPrimary
+                                            )
+                                            Text(
+                                                text = "Tap to authorize nutrition & macros sync with Health Connect",
+                                                fontSize = 11.sp,
+                                                color = colors.textSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Section header: Macronutrient metrics
+                            Text(
+                                text = "SELECT MACRONUTRIENT",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = colors.textTertiary
+                            )
+
+                            // 2-column grid of macronutrient cards
+                            val macroMetrics = remember {
+                                HealthMetricType.entries.filter { it.isMacronutrient }
+                            }
+                            val macroRows = remember(macroMetrics) {
+                                macroMetrics.chunked(2)
+                            }
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                macroRows.forEach { rowMetrics ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        rowMetrics.forEach { metric ->
+                                            val isSelected = selectedHealthMetric == metric
+                                            MacroMetricCard(
+                                                metric = metric,
+                                                isSelected = isSelected,
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    selectedHealthMetric = metric
+                                                    healthTargetValue = metric.defaultTarget
+                                                    healthCustomTargetText = metric.defaultTarget.toLong().toString()
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        if (rowMetrics.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Condition: At Least (>=) vs At Most (<=)
+                            Text(
+                                text = "CONDITION",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = colors.textTertiary
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                GoalComparison.entries.forEach { comp ->
+                                    FluidFilterChip(
+                                        label = comp.label,
+                                        selected = healthComparison == comp,
+                                        onClick = { healthComparison = comp }
+                                    )
+                                }
+                            }
+
+                            // Target Value: Presets + Custom
+                            Text(
+                                text = "TARGET (${selectedHealthMetric.unit.uppercase()})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = colors.textTertiary
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                selectedHealthMetric.presetTargets.forEach { preset ->
+                                    FluidFilterChip(
+                                        label = "${selectedHealthMetric.formatValue(preset)} ${selectedHealthMetric.unit}",
+                                        selected = healthTargetValue == preset,
+                                        onClick = {
+                                            healthTargetValue = preset
+                                            healthCustomTargetText = preset.toLong().toString()
+                                        }
+                                    )
+                                }
+
+                                // Custom numeric input
+                                Box(
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .clip(FluidShapes.full)
+                                        .background(if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f))
+                                        .border(1.dp, colors.divider, FluidShapes.full)
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(text = "Custom:", fontSize = 12.sp, color = colors.textSecondary)
+                                        BasicTextField(
+                                            value = healthCustomTargetText,
+                                            onValueChange = { newText ->
+                                                val filtered = newText.filter { it.isDigit() || it == '.' }
+                                                healthCustomTargetText = filtered
+                                                filtered.toDoubleOrNull()?.let {
+                                                    if (it > 0.0) healthTargetValue = it
+                                                }
+                                            },
+                                            singleLine = true,
+                                            textStyle = TextStyle(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = colors.textPrimary
+                                            ),
+                                            cursorBrush = SolidColor(colors.accent),
+                                            modifier = Modifier.widthIn(min = 40.dp, max = 80.dp)
+                                        )
+                                        Text(text = selectedHealthMetric.unit, fontSize = 12.sp, color = colors.textTertiary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    CreatorTab.HEALTH_FITNESS -> {
+                        // HEALTH CONNECT BIOMETRIC CONFIGURATION (Steps, Sleep, Calories, Exercise, etc.)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(FluidSpacing.sm)
@@ -522,7 +766,7 @@ fun GoalCreatorSheet(
                                 }
                             }
 
-                            // Health Metric Types
+                            // Health Metric Types (Fitness & Biometrics)
                             Text(
                                 text = "HEALTH METRIC",
                                 fontSize = 11.sp,
@@ -530,13 +774,16 @@ fun GoalCreatorSheet(
                                 letterSpacing = 1.sp,
                                 color = colors.textTertiary
                             )
+                            val fitnessMetrics = remember {
+                                HealthMetricType.entries.filter { !it.isMacronutrient }
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                HealthMetricType.entries.forEach { metric ->
+                                fitnessMetrics.forEach { metric ->
                                     FluidFilterChip(
                                         label = metric.label,
                                         selected = selectedHealthMetric == metric,
@@ -650,8 +897,8 @@ fun GoalCreatorSheet(
                         }
                     }
 
-                    GoalCategory.APP_USAGE -> {
-                        // APP USAGE LIMIT CONFIGURATION
+                    CreatorTab.APP_USAGE -> {
+                        // APP USAGE LIMIT CONFIGURATION (Searchable 2-Column Grid)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(FluidSpacing.sm)
@@ -696,45 +943,201 @@ fun GoalCreatorSheet(
                                 }
                             }
 
-                            // Select App (Installed / Popular Apps)
+                            // Header
+                            Text(
+                                text = "SELECT APP",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = colors.textTertiary
+                            )
+
+                            // Pinned Summary Pill: always visible so selected app is obvious
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(FluidShapes.sm)
+                                    .background(MomentumSpectrum.Purple.copy(alpha = 0.12f))
+                                    .border(1.dp, MomentumSpectrum.Purple.copy(alpha = 0.35f), FluidShapes.sm)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PhoneAndroid,
+                                    contentDescription = null,
+                                    tint = MomentumSpectrum.Purple,
+                                    modifier = Modifier.size(16.dp)
+                                )
                                 Text(
-                                    text = "TARGET APP",
+                                    text = "Selected App:",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp,
-                                    color = colors.textTertiary
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.textSecondary
                                 )
                                 Text(
                                     text = selectedAppName,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.accent
+                                    fontWeight = FontWeight.Bold,
+                                    color = MomentumSpectrum.Purple
+                                )
+                                Text(
+                                    text = "($selectedPackageName)",
+                                    fontSize = 10.sp,
+                                    color = colors.textTertiary,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1
+                                )
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = MomentumSpectrum.Purple,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
-                            // Horizontal scroll of app chips
-                            Row(
+                            // Frosted-Glass Search Apps Bar
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .clip(FluidShapes.md)
+                                    .background(if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.04f))
+                                    .border(1.dp, colors.divider, FluidShapes.md)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
                             ) {
-                                effectiveAppList.forEach { appInfo ->
-                                    val isSelected = selectedPackageName == appInfo.packageName
-                                    FluidFilterChip(
-                                        label = appInfo.appName,
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedPackageName = appInfo.packageName
-                                            selectedAppName = appInfo.appName
-                                        },
-                                        leadingIcon = Icons.Rounded.PhoneAndroid
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Search,
+                                        contentDescription = "Search",
+                                        tint = colors.textTertiary,
+                                        modifier = Modifier.size(18.dp)
                                     )
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        if (appSearchQuery.isEmpty()) {
+                                            Text(
+                                                text = "Search apps by name or package (e.g. Instagram, YouTube)...",
+                                                fontSize = 12.sp,
+                                                color = colors.textTertiary,
+                                                maxLines = 1
+                                            )
+                                        }
+                                        BasicTextField(
+                                            value = appSearchQuery,
+                                            onValueChange = { appSearchQuery = it },
+                                            singleLine = true,
+                                            textStyle = TextStyle(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = colors.textPrimary
+                                            ),
+                                            cursorBrush = SolidColor(colors.accent),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    if (appSearchQuery.isNotEmpty()) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Clear search",
+                                            tint = colors.textTertiary,
+                                            modifier = Modifier
+                                                .size(18.dp)
+                                                .clickable { appSearchQuery = "" }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 1-tap button to use custom search query as target app when not exactly matched
+                            val trimmedAppQuery = appSearchQuery.trim()
+                            val hasExactMatch = filteredApps.any {
+                                it.appName.equals(trimmedAppQuery, ignoreCase = true) ||
+                                    it.packageName.equals(trimmedAppQuery, ignoreCase = true)
+                            }
+                            if (trimmedAppQuery.isNotBlank() && !hasExactMatch) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(FluidShapes.sm)
+                                        .background(colors.accent.copy(alpha = 0.12f))
+                                        .border(1.dp, colors.accent.copy(alpha = 0.35f), FluidShapes.sm)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedAppName = trimmedAppQuery
+                                            selectedPackageName = trimmedAppQuery.lowercase().replace(" ", ".")
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Apps,
+                                            contentDescription = null,
+                                            tint = colors.accent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Use \"$trimmedAppQuery\" as target app",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = colors.accent
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 2-Column Grid of filtered apps (Replaces side-scrolling row)
+                            val chunkedApps = remember(filteredApps) { filteredApps.chunked(2) }
+
+                            if (filteredApps.isEmpty() && trimmedAppQuery.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No apps matched \"$trimmedAppQuery\". Tap \"Use target app\" above.",
+                                        fontSize = 12.sp,
+                                        color = colors.textTertiary
+                                    )
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 210.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    chunkedApps.forEach { rowApps ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            rowApps.forEach { appInfo ->
+                                                val isSelected = selectedPackageName == appInfo.packageName
+                                                AppPickerCard(
+                                                    appInfo = appInfo,
+                                                    isSelected = isSelected,
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        selectedPackageName = appInfo.packageName
+                                                        selectedAppName = appInfo.appName
+                                                    },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+                                            if (rowApps.size == 1) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -976,6 +1379,172 @@ fun GoalCreatorSheet(
                 )
 
                 Spacer(modifier = Modifier.height(FluidSpacing.sm))
+            }
+        }
+    }
+}
+
+/**
+ * Modern Macro Metric card for 2-column grid selection.
+ * Highlights with a distinct color dot, preset target, and checkmark on selection.
+ */
+@Composable
+private fun MacroMetricCard(
+    metric: HealthMetricType,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = FluidTheme.colors
+    val isDark = colors.isDark
+
+    val cardAccent = when (metric) {
+        HealthMetricType.PROTEIN_GRAMS -> Color(0xFFFF6B4A) // Coral
+        HealthMetricType.CARBS_GRAMS -> MomentumSpectrum.Yellow // Gold
+        HealthMetricType.FAT_GRAMS -> MomentumSpectrum.Purple // Purple
+        HealthMetricType.DIETARY_CALORIES -> MomentumSpectrum.Red // Crimson
+        HealthMetricType.FIBER_GRAMS -> MomentumSpectrum.Green // Emerald
+        HealthMetricType.SUGAR_GRAMS -> Color(0xFFFF2D55) // Hot Pink
+        else -> colors.accent
+    }
+
+    val bgModifier = if (isSelected) {
+        Modifier
+            .background(cardAccent.copy(alpha = 0.16f))
+            .border(1.5.dp, cardAccent, FluidShapes.sm)
+    } else {
+        Modifier
+            .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.03f))
+            .border(1.dp, colors.divider.copy(alpha = 0.6f), FluidShapes.sm)
+    }
+
+    Box(
+        modifier = modifier
+            .clip(FluidShapes.sm)
+            .then(bgModifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(cardAccent)
+                    )
+                    Text(
+                        text = metric.label,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                        color = colors.textPrimary,
+                        maxLines = 1
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Preset: ${metric.formatValue(metric.defaultTarget)} ${metric.unit}",
+                    fontSize = 11.sp,
+                    color = colors.textSecondary
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = cardAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(FluidShapes.full)
+                        .background(if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = metric.unit,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.textTertiary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 2-Column App Picker card displaying app name, package subtitle, and selection state.
+ */
+@Composable
+private fun AppPickerCard(
+    appInfo: InstalledAppInfo,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = FluidTheme.colors
+    val isDark = colors.isDark
+
+    val bgModifier = if (isSelected) {
+        Modifier
+            .background(MomentumSpectrum.Purple.copy(alpha = 0.16f))
+            .border(1.5.dp, MomentumSpectrum.Purple, FluidShapes.sm)
+    } else {
+        Modifier
+            .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.03f))
+            .border(1.dp, colors.divider.copy(alpha = 0.5f), FluidShapes.sm)
+    }
+
+    Box(
+        modifier = modifier
+            .clip(FluidShapes.sm)
+            .then(bgModifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.PhoneAndroid,
+                contentDescription = null,
+                tint = if (isSelected) MomentumSpectrum.Purple else colors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = appInfo.appName,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                    maxLines = 1
+                )
+                Text(
+                    text = appInfo.packageName,
+                    fontSize = 9.sp,
+                    color = colors.textTertiary,
+                    maxLines = 1
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = MomentumSpectrum.Purple,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
