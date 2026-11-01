@@ -3,7 +3,7 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="4dp">
+    android:padding="2dp">
 
     <ImageView
         android:id="@+id/widget_canvas_image"
@@ -19,6 +19,7 @@
         android:background="@android:color/transparent">
 
         <LinearLayout
+            android:id="@+id/widget_top_row"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -33,19 +34,14 @@
                 android:background="@android:color/transparent" />
 
             <FrameLayout
-                android:id="@+id/widget_btn_voice_capture"
-                android:layout_width="56dp"
-                android:layout_height="match_parent"
-                android:background="@android:color/transparent" />
-
-            <FrameLayout
                 android:id="@+id/widget_btn_quick_capture"
-                android:layout_width="56dp"
+                android:layout_width="64dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent" />
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/widget_bottom_task_row"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:orientation="horizontal"
@@ -53,7 +49,7 @@
 
             <FrameLayout
                 android:id="@+id/widget_btn_complete_task"
-                android:layout_width="56dp"
+                android:layout_width="60dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent" />
 

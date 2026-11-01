@@ -191,6 +191,7 @@ class ShizukuSystemColorManager(private val context: Context) {
             if (success) {
                 _lastAppliedHex.value = hex
                 refreshStatus()
+                com.flow.todo.widget.FlowGlassWidgetProvider.requestWidgetUpdate(context)
                 true
             } else {
                 false
@@ -229,6 +230,7 @@ class ShizukuSystemColorManager(private val context: Context) {
         if (success) {
             _lastAppliedHex.value = null
             refreshStatus()
+            com.flow.todo.widget.FlowGlassWidgetProvider.requestWidgetUpdate(context)
             true
         } else {
             false
