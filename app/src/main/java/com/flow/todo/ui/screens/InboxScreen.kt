@@ -21,6 +21,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,6 +68,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.ui.components.FluidFilterChip
@@ -88,6 +92,9 @@ fun InboxScreen(
     onToggleSubtask: (String, String) -> Unit = { _, _ -> },
     onAddSubtask: (String, String) -> Unit = { _, _ -> },
     onDeleteSubtask: (String, String) -> Unit = { _, _ -> },
+    selectedContextTag: String? = null,
+    onSelectContextFilter: (String?) -> Unit = {},
+    onStartFocus: (taskId: String, taskTitle: String) -> Unit = { _, _ -> },
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -272,6 +279,35 @@ fun InboxScreen(
                     onClick = { selectedFilterIndex = 2 }
                 )
             }
+
+            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+            // GTD Context Filter Chips (@work, @home, @errands, @gym, @calls)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FluidFilterChip(
+                    label = "All Contexts",
+                    selected = selectedContextTag == null,
+                    onClick = { onSelectContextFilter(null) }
+                )
+                GtdContext.ALL.forEach { ctx ->
+                    val isSelected = selectedContextTag == ctx.tag
+                    FluidFilterChip(
+                        label = ctx.label,
+                        selected = isSelected,
+                        accentColor = Color(ctx.colorHex),
+                        onClick = {
+                            if (isSelected) onSelectContextFilter(null)
+                            else onSelectContextFilter(ctx.tag)
+                        }
+                    )
+                }
+            }
         }
 
         item {
@@ -408,7 +444,8 @@ fun InboxScreen(
                                             onDelete = { onDeleteTask(task.id) },
                                             onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                             onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                            onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                            onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                            onStartFocus = { onStartFocus(task.id, task.title) }
                                         )
                                     }
                                 }

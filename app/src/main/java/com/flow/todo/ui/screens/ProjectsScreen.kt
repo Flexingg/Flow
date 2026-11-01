@@ -101,6 +101,7 @@ fun ProjectsScreen(
     onToggleSubtask: (String, String) -> Unit = { _, _ -> },
     onAddSubtask: (String, String) -> Unit = { _, _ -> },
     onDeleteSubtask: (String, String) -> Unit = { _, _ -> },
+    onStartFocus: (taskId: String, taskTitle: String) -> Unit = { _, _ -> },
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -334,7 +335,8 @@ fun ProjectsScreen(
                                                     onDelete = { onDeleteTask(task.id) },
                                                     onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                     onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                    onStartFocus = { onStartFocus(task.id, task.title) }
                                                 )
                                             }
                                         }
@@ -468,7 +470,8 @@ fun ProjectsScreen(
                                         onDelete = { onDeleteTask(task.id) },
                                         onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                         onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                        onStartFocus = { onStartFocus(task.id, task.title) }
                                     )
                                 }
                             }

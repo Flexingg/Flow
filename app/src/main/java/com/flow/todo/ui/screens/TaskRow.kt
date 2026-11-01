@@ -43,9 +43,11 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,6 +104,7 @@ fun TaskRow(
     onAddSubtask: (String) -> Unit = {},
     onDeleteSubtask: (String) -> Unit = {},
     healthSnapshot: HealthDailySnapshot? = null,
+    onStartFocus: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -170,8 +173,21 @@ fun TaskRow(
     val badgeEnter = scaleIn(FluidSprings.release(isReducedMotion)) + expandHorizontally()
     val badgeExit = scaleOut(FluidSprings.release(isReducedMotion)) + shrinkHorizontally()
 
-    val menuActions = remember(task, project) {
-        listOf(
+    val menuActions = remember(task, project, onStartFocus) {
+        val actions = mutableListOf<FluidMenuAction>()
+        if (onStartFocus != null && !task.isCompleted) {
+            actions.add(
+                FluidMenuAction(
+                    label = "Deep Flow Focus (25m)",
+                    icon = Icons.Rounded.SelfImprovement,
+                    onSelect = {
+                        menuExpanded = false
+                        onStartFocus()
+                    }
+                )
+            )
+        }
+        actions.add(
             FluidMenuAction(
                 label = "Do Today",
                 icon = Icons.Rounded.Today,
@@ -179,7 +195,9 @@ fun TaskRow(
                     menuExpanded = false
                     onAssignToday()
                 }
-            ),
+            )
+        )
+        actions.add(
             FluidMenuAction(
                 label = "Add / Manage Subtasks",
                 icon = Icons.Rounded.Checklist,
@@ -188,7 +206,8 @@ fun TaskRow(
                     subtasksExpanded = true
                     showAddSubtaskInput = true
                 }
-            ),
+            )
+        )
             FluidMenuAction(
                 label = "Move to Next Action",
                 icon = Icons.Rounded.PlayArrow,
@@ -350,13 +369,14 @@ fun TaskRow(
                     )
                 }
 
-                // Badges row: Project, Subtasks, Recurrence, Due Date, Health Goal, Flag with bubbly micro-interactions
+                // Badges row: Project, Subtasks, Recurrence, Due Date, Health Goal, Context, Flag with bubbly micro-interactions
                 val hasBadges = project != null ||
                     task.subtasks.isNotEmpty() ||
                     task.dueDateEpochDay != null ||
                     task.isFlagged ||
                     task.recurrenceRule?.isRecurring == true ||
-                    task.healthGoal != null
+                    task.healthGoal != null ||
+                    !task.contextTag.isNullOrBlank()
 
                 this@Column.AnimatedVisibility(
                     visible = hasBadges,
@@ -530,6 +550,36 @@ fun TaskRow(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = FluidTheme.colors.accent
+                                    )
+                                }
+                            }
+                        }
+
+                        // GTD Context Badge (@work, @home, @errands, etc.)
+                        if (!task.contextTag.isNullOrBlank()) {
+                            val ctxColor = FluidTheme.colors.accent
+                            Box(
+                                modifier = Modifier
+                                    .clip(FluidShapes.full)
+                                    .background(ctxColor.copy(alpha = 0.12f))
+                                    .border(1.dp, ctxColor.copy(alpha = 0.28f), FluidShapes.full)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.LocationOn,
+                                        contentDescription = "Context",
+                                        tint = ctxColor,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = task.contextTag,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = ctxColor
                                     )
                                 }
                             }

@@ -1,6 +1,6 @@
-package com.flow.todo.domain.nlp
-
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.GtdContext
+import com.flow.todo.domain.model.ParsedTaskDraft
 import com.flow.todo.domain.model.ParsedTaskSuggestion
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
@@ -15,6 +15,7 @@ object NaturalLanguageTaskParser {
 
     private val priorityRegex = Regex("""(?i)(?:^|\s)(!flag|!high|!urgent|!important|!p1|!!)(?=\s|$)""")
     private val bucketRegex = Regex("""(?i)(?:^|\s)@(inbox|next|someday|maybe|scheduled)(?=\s|$)""")
+    private val contextTagRegex = Regex("""(?i)(?:^|\s)(@(work|home|errands|gym|calls|store|office|desk))(?=\s|$)""")
     private val projectRegex = Regex("""#\"([^\"]+)\"|#([A-Za-z0-9_-]+)""")
 
     private val dailyRegex = Regex("""(?i)\b(every\s+day|daily)\b""")
@@ -109,6 +110,24 @@ object NaturalLanguageTaskParser {
                     detectedTokens.add("📁 #$formattedNewName (New)")
                 }
                 workingTitle = workingTitle.removeRange(projectMatch.range)
+            }
+        }
+
+        // 3.5 GTD Context Tag (@work, @home, @errands, etc.)
+        var contextTag: String? = null
+        val ctxMatch = contextTagRegex.find(workingTitle)
+        if (ctxMatch != null) {
+            val matchedTag = ctxMatch.groupValues[1].lowercase(Locale.getDefault())
+            contextTag = matchedTag
+            val label = GtdContext.ALL.firstOrNull { it.tag.equals(matchedTag, ignoreCase = true) }?.label ?: matchedTag
+            detectedTokens.add("📍 $matchedTag ($label)")
+            workingTitle = workingTitle.removeRange(ctxMatch.range)
+        } else {
+            // Semantic keyword auto-detection if no explicit @tag
+            val semanticContext = GtdContext.findMatchingContext(workingTitle)
+            if (semanticContext != null) {
+                contextTag = semanticContext.tag
+                detectedTokens.add("📍 ${semanticContext.tag} (${semanticContext.label})")
             }
         }
 
@@ -327,8 +346,54 @@ object NaturalLanguageTaskParser {
             bucket = bucket,
             recurrenceRule = recurrenceRule,
             extractedSubtasks = extractedSubtasks,
-            detectedTokens = detectedTokens
+            detectedTokens = detectedTokens,
+            contextTag = contextTag
         )
+    }
+
+    /**
+     * Splits multi-clause voice transcriptions or compound brain-dumps into individual tasks.
+     * Handles:
+     * - Newlines & numbered lists (1. ... 2. ...)
+     * - Semicolons and conjunctions: ", and ", "; ", " also ", " then ", " plus "
+     */
+    fun splitMultiTaskInput(input: String): List<String> {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return emptyList()
+
+        val lines = trimmed.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.size > 1) {
+            val isList = lines.all { it.matches(Regex("""^\s*(?:\d+[\.\)]|[-*•])\s+.*""")) }
+            if (isList || lines.size >= 2) {
+                return lines.map {
+                    it.replace(Regex("""^\s*(?:\d+[\.\)]|[-*•])\s+"""), "").trim()
+                }.filter { it.isNotBlank() }
+            }
+        }
+
+        val clauseSplitRegex = Regex("""(?i)(?:;\s*|,\s*(?:and\s+also|and\s+then|and|also|plus)\s+|\s+(?:and\s+also|and\s+then|also|then|plus)\s+)""")
+        val clauses = trimmed.split(clauseSplitRegex).map { it.trim() }.filter { it.length > 2 }
+        return if (clauses.size > 1) clauses else listOf(trimmed)
+    }
+
+    fun parseMultiple(
+        input: String,
+        projects: List<Project> = emptyList(),
+        today: LocalDate = LocalDate.now()
+    ): List<ParsedTaskDraft> {
+        val clauses = splitMultiTaskInput(input)
+        return clauses.map { clause ->
+            val suggestion = parse(clause, projects = projects, today = today)
+            ParsedTaskDraft(
+                title = suggestion.cleanedTitle,
+                bucket = suggestion.bucket ?: GtdBucket.INBOX,
+                dueDateEpochDay = suggestion.dueDateEpochDay,
+                projectId = suggestion.matchedProject?.id,
+                isFlagged = suggestion.isFlagged,
+                recurrenceRule = suggestion.recurrenceRule,
+                contextTag = suggestion.contextTag
+            )
+        }
     }
 
     private fun parseOrdinal(raw: String): Int {

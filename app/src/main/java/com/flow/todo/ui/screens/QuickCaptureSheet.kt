@@ -80,7 +80,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.HealthGoalSpec
+import com.flow.todo.domain.model.ParsedTaskDraft
 import com.flow.todo.domain.model.ParsedTaskSuggestion
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
@@ -124,8 +126,10 @@ fun QuickCaptureSheet(
         isFlagged: Boolean,
         recurrenceRule: RecurrenceRule?,
         healthGoal: HealthGoalSpec?,
-        subtasks: List<SubtaskItem>
-    ) -> Unit
+        subtasks: List<SubtaskItem>,
+        contextTag: String?
+    ) -> Unit,
+    onBatchAddTasks: (List<ParsedTaskDraft>) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptic = LocalHapticFeedback.current
@@ -139,6 +143,7 @@ fun QuickCaptureSheet(
     var selectedDateOption by remember { mutableStateOf(QuickDateOption.NO_DATE) }
     var customParsedDueEpochDay by remember { mutableStateOf<Long?>(null) }
     var selectedProjectId by remember { mutableStateOf<String?>(null) }
+    var selectedContextTag by remember { mutableStateOf<String?>(null) }
     var isFlagged by remember { mutableStateOf(false) }
     var smartParseEnabled by remember { mutableStateOf(true) }
 
@@ -188,6 +193,7 @@ fun QuickCaptureSheet(
             isFlagged = true
         }
         suggestion.bucket?.let { selectedBucket = it }
+        suggestion.contextTag?.let { selectedContextTag = it }
         suggestion.recurrenceRule?.let { rule ->
             selectedRecurrenceType = rule.type
             selectedDailyInterval = rule.interval
@@ -205,7 +211,7 @@ fun QuickCaptureSheet(
         }
     }
 
-    // 1-Tap Voice Speech Recognizer Launcher
+    // 1-Tap Voice Speech Recognizer Launcher with Multi-Task Splitter
     val voiceLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -213,14 +219,21 @@ fun QuickCaptureSheet(
             val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             val spokenText = matches?.firstOrNull()?.trim().orEmpty()
             if (spokenText.isNotEmpty()) {
-                val suggestion = NaturalLanguageTaskParser.parse(
-                    rawTitle = spokenText,
-                    rawNotes = notes,
-                    projects = projects,
-                    today = today
-                )
-                title = suggestion.cleanedTitle.ifBlank { spokenText }
-                applyParsedSuggestionNow(suggestion)
+                val clauses = NaturalLanguageTaskParser.splitMultiTaskInput(spokenText)
+                if (clauses.size > 1) {
+                    val drafts = NaturalLanguageTaskParser.parseMultiple(spokenText, projects, today)
+                    onBatchAddTasks(drafts)
+                    onDismiss()
+                } else {
+                    val suggestion = NaturalLanguageTaskParser.parse(
+                        rawTitle = spokenText,
+                        rawNotes = notes,
+                        projects = projects,
+                        today = today
+                    )
+                    title = suggestion.cleanedTitle.ifBlank { spokenText }
+                    applyParsedSuggestionNow(suggestion)
+                }
             }
         }
     }
@@ -1204,6 +1217,47 @@ fun QuickCaptureSheet(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                // 4.5 GTD Context Selection Row (@work, @home, @errands, etc.)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "GTD CONTEXT / LOCATION",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        color = FluidTheme.colors.textTertiary
+                    )
+                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(FluidSpacing.xs)
+                    ) {
+                        FluidFilterChip(
+                            label = "None",
+                            selected = selectedContextTag == null,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedContextTag = null
+                            }
+                        )
+                        GtdContext.ALL.forEach { ctx ->
+                            val isSelected = selectedContextTag.equals(ctx.tag, ignoreCase = true)
+                            FluidFilterChip(
+                                label = "${ctx.tag} (${ctx.label})",
+                                selected = isSelected,
+                                accentColor = Color(ctx.colorHex),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedContextTag = if (isSelected) null else ctx.tag
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(FluidSpacing.xl))
 
                 // Full-width Primary "Add to Flow" Button
@@ -1232,6 +1286,7 @@ fun QuickCaptureSheet(
                             val finalProjectId = selectedProjectId ?: if (useSmart) parsedSuggestion.matchedProject?.id else null
                             val finalFlagged = isFlagged || (useSmart && parsedSuggestion.isFlagged)
                             val finalRecurrence = builtRule ?: if (useSmart) parsedSuggestion.recurrenceRule else null
+                            val finalContext = selectedContextTag ?: if (useSmart) parsedSuggestion.contextTag else null
                             val finalBucket = when {
                                 selectedBucket != GtdBucket.INBOX -> selectedBucket
                                 useSmart && parsedSuggestion.bucket != null -> parsedSuggestion.bucket
@@ -1263,7 +1318,8 @@ fun QuickCaptureSheet(
                                 finalFlagged,
                                 finalRecurrence,
                                 null,
-                                mergedSubtasks
+                                mergedSubtasks,
+                                finalContext
                             )
                             onDismiss()
                         }

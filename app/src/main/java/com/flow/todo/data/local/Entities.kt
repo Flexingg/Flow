@@ -1,6 +1,7 @@
 package com.flow.todo.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.flow.todo.domain.model.AppUsageMetricType
 import com.flow.todo.domain.model.DailyCompletionRecord
@@ -24,7 +25,16 @@ data class ProjectEntity(
     val createdAt: Long
 )
 
-@Entity(tableName = "tasks")
+@Entity(
+    tableName = "tasks",
+    indices = [
+        Index(value = ["bucketName", "isCompleted"]),
+        Index(value = ["dueDateEpochDay"]),
+        Index(value = ["projectId"]),
+        Index(value = ["completedAt"]),
+        Index(value = ["contextTag"])
+    ]
+)
 data class TaskEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -37,11 +47,18 @@ data class TaskEntity(
     val recurrenceRuleRaw: String? = null,
     val healthGoalRaw: String? = null,
     val subtasksRaw: String? = null,
+    val contextTag: String? = null,
     val createdAt: Long,
     val completedAt: Long?
 )
 
-@Entity(tableName = "goals")
+@Entity(
+    tableName = "goals",
+    indices = [
+        Index(value = ["categoryName"]),
+        Index(value = ["periodName"])
+    ]
+)
 data class GoalEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -93,6 +110,7 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
     healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
     subtasks = SubtaskItem.listFromStorageString(subtasksRaw),
+    contextTag = contextTag,
     createdAt = createdAt,
     completedAt = completedAt
 )
@@ -109,6 +127,7 @@ fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     recurrenceRuleRaw = recurrenceRule?.toStorageString(),
     healthGoalRaw = healthGoal?.toStorageString(),
     subtasksRaw = SubtaskItem.listToStorageString(subtasks),
+    contextTag = contextTag,
     createdAt = createdAt,
     completedAt = completedAt
 )

@@ -65,9 +65,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.SelfImprovement
 import com.flow.todo.domain.model.ContributionChartSummary
 import com.flow.todo.domain.model.EvaluatedGoal
 import com.flow.todo.domain.model.GtdBucket
+import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
@@ -119,6 +122,14 @@ fun TodayNextScreen(
     onToggleSubtask: (String, String) -> Unit = { _, _ -> },
     onAddSubtask: (String, String) -> Unit = { _, _ -> },
     onDeleteSubtask: (String, String) -> Unit = { _, _ -> },
+    selectedContextTag: String? = null,
+    onSelectContextFilter: (String?) -> Unit = {},
+    onStartFocus: (taskId: String, taskTitle: String) -> Unit = { _, _ -> },
+    isFocusActive: Boolean = false,
+    focusRemainingFormatted: String = "25:00",
+    onOpenFocusSheet: () -> Unit = {},
+    onOpenMorningRitual: () -> Unit = {},
+    onOpenEveningRitual: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -380,6 +391,76 @@ fun TodayNextScreen(
             }
         }
 
+        // GTD Daily Rituals & Deep Flow Focus Mode Card
+        item {
+            Spacer(modifier = Modifier.height(FluidSpacing.md))
+            FluidInsetCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentGlowColor = momentumAccentColor.copy(alpha = 0.25f)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isFocusActive) Icons.Rounded.Headphones else Icons.Rounded.SelfImprovement,
+                                contentDescription = null,
+                                tint = FluidTheme.colors.accent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = if (isFocusActive) "Deep Flow Focus Active" else "GTD Rituals & Focus",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FluidTheme.colors.textPrimary
+                            )
+                            Text(
+                                text = if (isFocusActive) "$focusRemainingFormatted remaining • Ambient soundscape" else "Morning alignment & sunset review",
+                                fontSize = 11.sp,
+                                color = FluidTheme.colors.textSecondary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FluidPillButton(
+                            text = if (isFocusActive) "Timer" else "Focus",
+                            onClick = onOpenFocusSheet,
+                            isPrimary = isFocusActive,
+                            modifier = Modifier.height(32.dp)
+                        )
+                        FluidPillButton(
+                            text = "Morning",
+                            onClick = onOpenMorningRitual,
+                            isPrimary = false,
+                            modifier = Modifier.height(32.dp)
+                        )
+                        FluidPillButton(
+                            text = "Sunset",
+                            onClick = onOpenEveningRitual,
+                            isPrimary = false,
+                            modifier = Modifier.height(32.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // Living Flow Glass Segmented Mode Switcher
         item {
             Spacer(modifier = Modifier.height(FluidSpacing.md))
@@ -500,6 +581,36 @@ fun TodayNextScreen(
                 }
             }
             Spacer(modifier = Modifier.height(FluidSpacing.md))
+        }
+
+        // GTD Context Filter Chips (@work, @home, @errands, @gym, @calls)
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FluidFilterChip(
+                    label = "All Contexts",
+                    selected = selectedContextTag == null,
+                    onClick = { onSelectContextFilter(null) }
+                )
+                GtdContext.ALL.forEach { ctx ->
+                    val isSelected = selectedContextTag == ctx.tag
+                    FluidFilterChip(
+                        label = ctx.label,
+                        selected = isSelected,
+                        accentColor = Color(ctx.colorHex),
+                        onClick = {
+                            if (isSelected) onSelectContextFilter(null)
+                            else onSelectContextFilter(ctx.tag)
+                        }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(FluidSpacing.sm))
         }
 
         // Bouncy animated mode content transition
@@ -664,7 +775,8 @@ fun TodayNextScreen(
                                                     healthSnapshot = healthSnapshot,
                                                     onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                     onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                    onStartFocus = { onStartFocus(task.id, task.title) }
                                                 )
                                             }
                                         }
@@ -789,7 +901,8 @@ fun TodayNextScreen(
                                                     healthSnapshot = healthSnapshot,
                                                     onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                     onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                    onStartFocus = { onStartFocus(task.id, task.title) }
                                                 )
                                             }
                                         }
@@ -895,7 +1008,8 @@ fun TodayNextScreen(
                                                     healthSnapshot = healthSnapshot,
                                                     onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                     onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                    onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                    onStartFocus = { onStartFocus(task.id, task.title) }
                                                 )
                                             }
                                         }
@@ -1105,7 +1219,8 @@ fun TodayNextScreen(
                                                             healthSnapshot = healthSnapshot,
                                                             onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                             onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                            onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                            onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                            onStartFocus = { onStartFocus(task.id, task.title) }
                                                         )
                                                     }
                                                 }
@@ -1207,7 +1322,8 @@ fun TodayNextScreen(
                                                         healthSnapshot = healthSnapshot,
                                                         onToggleSubtask = { subtaskId -> onToggleSubtask(task.id, subtaskId) },
                                                         onAddSubtask = { title -> onAddSubtask(task.id, title) },
-                                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) }
+                                                        onDeleteSubtask = { subtaskId -> onDeleteSubtask(task.id, subtaskId) },
+                                                        onStartFocus = { onStartFocus(task.id, task.title) }
                                                     )
                                                 }
                                             }

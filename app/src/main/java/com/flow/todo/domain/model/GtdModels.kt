@@ -437,6 +437,7 @@ data class TaskItem(
     val recurrenceRule: RecurrenceRule? = null,
     val healthGoal: HealthGoalSpec? = null,
     val subtasks: List<SubtaskItem> = emptyList(),
+    val contextTag: String? = null, // e.g. "@work", "@home", "@errands"
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null
 ) {
@@ -450,6 +451,99 @@ data class TaskItem(
         get() = if (subtasks.isEmpty()) 0f else completedSubtasksCount.toFloat() / subtasks.size.toFloat()
 }
 
+/**
+ * Procedural Ambient Soundscapes for Deep Flow Focus Mode (Zero file assets needed)
+ */
+enum class AmbientSoundscape(val id: String, val label: String, val description: String) {
+    OFF("off", "Mute", "Pure silence"),
+    RAIN_SHOWER("rain", "Rain Shower", "Gentle acoustic rainfall with soft droplet transients"),
+    FOREST_STREAM("stream", "River Flow", "Organic liquid streaming soundscape"),
+    BROWN_NOISE("brown", "Deep Focus Noise", "Low-frequency smoothed noise for deep concentration"),
+    BINAURAL_ALPHA("alpha", "Binaural Alpha (10Hz)", "10Hz binaural beat for flow state entrainment")
+}
+
+data class FocusSessionState(
+    val isActive: Boolean = false,
+    val isPaused: Boolean = false,
+    val remainingSeconds: Int = 25 * 60,
+    val totalSeconds: Int = 25 * 60,
+    val targetTaskId: String? = null,
+    val targetTaskTitle: String? = null,
+    val soundscape: AmbientSoundscape = AmbientSoundscape.RAIN_SHOWER,
+    val isPlayingAudio: Boolean = false
+) {
+    val progress: Float
+        get() {
+            if (totalSeconds <= 0) return 0f
+            val elapsed = totalSeconds - remainingSeconds
+            return (elapsed.toFloat() / totalSeconds.toFloat()).coerceIn(0f, 1f)
+        }
+
+    val formattedRemainingTime: String
+        get() {
+            val mins = remainingSeconds / 60
+            val secs = remainingSeconds % 60
+            return String.format(Locale.US, "%02d:%02d", mins, secs)
+        }
+}
+
+/**
+ * GTD Contexts (e.g. @work, @home, @errands)
+ */
+data class GtdContext(
+    val tag: String,
+    val label: String,
+    val colorHex: Long,
+    val defaultKeywords: List<String> = emptyList()
+) {
+    companion object {
+        val ALL = listOf(
+            GtdContext("@work", "Work", 0xFF2F6BFF, listOf("work", "office", "email", "client", "meeting", "code", "report")),
+            GtdContext("@home", "Home", 0xFF22B35E, listOf("home", "house", "clean", "cook", "laundry", "fix", "dishes")),
+            GtdContext("@errands", "Errands", 0xFFFF9F0A, listOf("errand", "buy", "groceries", "store", "pharmacy", "post", "shop")),
+            GtdContext("@gym", "Fitness", 0xFFFF3B5C, listOf("gym", "workout", "run", "lift", "stretch", "training", "exercise")),
+            GtdContext("@calls", "Calls", 0xFFAF52DE, listOf("call", "phone", "zoom", "sync", "talk", "chat"))
+        )
+
+        fun findMatchingContext(text: String): GtdContext? {
+            val lower = text.lowercase(Locale.getDefault())
+            // Check explicit tag
+            ALL.firstOrNull { lower.contains(it.tag.lowercase(Locale.getDefault())) }?.let { return it }
+            // Check keywords
+            return ALL.firstOrNull { ctx ->
+                ctx.defaultKeywords.any { kw -> lower.contains(Regex("\\b$kw\\b")) }
+            }
+        }
+    }
+}
+
+/**
+ * Multi-Task Draft for Voice Brain-Dump and multi-clause parser
+ */
+data class ParsedTaskDraft(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val notes: String = "",
+    val bucket: GtdBucket = GtdBucket.INBOX,
+    val dueDateEpochDay: Long? = null,
+    val projectId: String? = null,
+    val isFlagged: Boolean = false,
+    val recurrenceRule: RecurrenceRule? = null,
+    val healthGoal: HealthGoalSpec? = null,
+    val contextTag: String? = null
+)
+
+/**
+ * Daily Rituals: Morning "Wake to Flow" and Evening "Sunset Review"
+ */
+data class DailyRitualState(
+    val isMorningOpen: Boolean = false,
+    val isEveningOpen: Boolean = false,
+    val top3TaskIds: Set<String> = emptySet(),
+    val morningCompletedEpochDay: Long? = null,
+    val eveningCompletedEpochDay: Long? = null
+)
+
 data class ParsedTaskSuggestion(
     val cleanedTitle: String,
     val dueDateEpochDay: Long? = null,
@@ -460,11 +554,12 @@ data class ParsedTaskSuggestion(
     val bucket: GtdBucket? = null,
     val recurrenceRule: RecurrenceRule? = null,
     val extractedSubtasks: List<String> = emptyList(),
-    val detectedTokens: List<String> = emptyList()
+    val detectedTokens: List<String> = emptyList(),
+    val contextTag: String? = null
 ) {
     val hasAnyDetection: Boolean
         get() = dueDateEpochDay != null || matchedProject != null || suggestedNewProjectName != null ||
-            isFlagged || bucket != null || recurrenceRule != null || extractedSubtasks.isNotEmpty()
+            isFlagged || bucket != null || recurrenceRule != null || extractedSubtasks.isNotEmpty() || contextTag != null
 }
 
 enum class ShieldSeverity(val label: String) {

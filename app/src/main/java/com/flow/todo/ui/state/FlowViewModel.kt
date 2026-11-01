@@ -58,6 +58,15 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToLong
 
+import com.flow.todo.data.audio.FluidAudioSynthesizer
+import com.flow.todo.domain.model.AmbientSoundscape
+import com.flow.todo.domain.model.DailyRitualState
+import com.flow.todo.domain.model.FocusSessionState
+import com.flow.todo.domain.model.GtdContext
+import com.flow.todo.domain.model.ParsedTaskDraft
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+
 val FlowGoal.isEnabled: Boolean
     get() = this.id !in FlowViewModel.globalDisabledGoalIds.value
 
@@ -95,7 +104,14 @@ data class FlowUiState(
     val cloudSyncState: CloudSyncState = CloudSyncState(),
     val contributionChart: ContributionChartSummary = ContributionChartSummary(),
     val activeShieldAlert: AppUsageShieldAlert? = null,
-    val shieldAlerts: List<AppUsageShieldAlert> = emptyList()
+    val shieldAlerts: List<AppUsageShieldAlert> = emptyList(),
+    val focusSession: FocusSessionState = FocusSessionState(),
+    val isFocusSheetOpen: Boolean = false,
+    val selectedContextTag: String? = null,
+    val dailyRitual: DailyRitualState = DailyRitualState(),
+    val rolloverTasks: List<TaskItem> = emptyList(),
+    val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
+    val isMultiTaskDraftOpen: Boolean = false
 )
 
 class FlowViewModel(
@@ -115,7 +131,13 @@ class FlowViewModel(
         val quickCaptureAutoVoice: Boolean = false,
         val isSettingsOpen: Boolean = false,
         val isGoalCreatorOpen: Boolean = false,
-        val disabledGoalIds: Set<String> = emptySet()
+        val disabledGoalIds: Set<String> = emptySet(),
+        val focusSession: FocusSessionState = FocusSessionState(),
+        val isFocusSheetOpen: Boolean = false,
+        val selectedContextTag: String? = null,
+        val dailyRitual: DailyRitualState = DailyRitualState(),
+        val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
+        val isMultiTaskDraftOpen: Boolean = false
     )
 
     private data class RepositoryDomainData(
@@ -213,9 +235,14 @@ class FlowViewModel(
         val goals = domainData.goals
         val usage = domainData.appUsage
 
-        val inboxTasks = tasks.filter { it.bucket == GtdBucket.INBOX }
+        val rawInboxTasks = tasks.filter { it.bucket == GtdBucket.INBOX }
+        val inboxTasks = if (flags.selectedContextTag != null) {
+            rawInboxTasks.filter { it.contextTag.equals(flags.selectedContextTag, ignoreCase = true) }
+        } else {
+            rawInboxTasks
+        }
 
-        val todayTasks = tasks.filter { task ->
+        val rawTodayTasks = tasks.filter { task ->
             val isDueTodayOrPast = task.dueDateEpochDay != null && task.dueDateEpochDay <= todayEpochDay
             val isRecurringToday = !task.isCompleted &&
                 task.recurrenceRule?.isRecurring == true &&
@@ -223,6 +250,16 @@ class FlowViewModel(
             val isFlaggedActive = task.isFlagged && !task.isCompleted
             val isFlaggedCompletedToday = task.isFlagged && task.isCompleted && isCompletedToday(task.completedAt, todayEpochDay)
             isDueTodayOrPast || isRecurringToday || isFlaggedActive || isFlaggedCompletedToday
+        }
+
+        val todayTasks = if (flags.selectedContextTag != null) {
+            rawTodayTasks.filter { it.contextTag.equals(flags.selectedContextTag, ignoreCase = true) }
+        } else {
+            rawTodayTasks
+        }
+
+        val rolloverTasks = tasks.filter {
+            !it.isCompleted && it.dueDateEpochDay != null && it.dueDateEpochDay < todayEpochDay
         }
 
         val todayTaskIds = todayTasks.map { it.id }.toSet()
@@ -375,7 +412,14 @@ class FlowViewModel(
             cloudSyncState = cloudSync,
             contributionChart = contributionChart,
             activeShieldAlert = sysHealth.activeShieldAlert,
-            shieldAlerts = sysHealth.shieldAlerts
+            shieldAlerts = sysHealth.shieldAlerts,
+            focusSession = flags.focusSession,
+            isFocusSheetOpen = flags.isFocusSheetOpen,
+            selectedContextTag = flags.selectedContextTag,
+            dailyRitual = flags.dailyRitual,
+            rolloverTasks = rolloverTasks,
+            pendingMultiTaskDrafts = flags.pendingMultiTaskDrafts,
+            isMultiTaskDraftOpen = flags.isMultiTaskDraftOpen
         )
     }.stateIn(
         scope = viewModelScope,
@@ -871,7 +915,8 @@ class FlowViewModel(
         isFlagged: Boolean = false,
         recurrenceRule: RecurrenceRule? = null,
         healthGoal: HealthGoalSpec? = null,
-        subtasks: List<SubtaskItem> = emptyList()
+        subtasks: List<SubtaskItem> = emptyList(),
+        contextTag: String? = null
     ) {
         if (title.isBlank()) return
         val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
@@ -898,6 +943,7 @@ class FlowViewModel(
             recurrenceRule = if (hasRecurrence) recurrenceRule else null,
             healthGoal = healthGoal,
             subtasks = subtasks,
+            contextTag = contextTag,
             createdAt = System.currentTimeMillis(),
             completedAt = null
         )
@@ -905,6 +951,276 @@ class FlowViewModel(
             repository.upsertTask(newTask)
             firestoreSyncManager?.pushTask(newTask)
         }
+    }
+
+    // --- Deep Flow Focus Mode & Procedural Ambient Soundscapes ---
+    private val audioSynthesizer = FluidAudioSynthesizer()
+    private var focusTimerJob: Job? = null
+
+    fun startFocusSession(
+        taskId: String? = null,
+        taskTitle: String? = null,
+        durationMinutes: Int = 25,
+        soundscape: AmbientSoundscape = AmbientSoundscape.RAIN_SHOWER
+    ) {
+        val totalSecs = (durationMinutes * 60).coerceAtLeast(60)
+        _localFlags.update { flags ->
+            flags.copy(
+                isFocusSheetOpen = true,
+                focusSession = FocusSessionState(
+                    isActive = true,
+                    isPaused = false,
+                    remainingSeconds = totalSecs,
+                    totalSeconds = totalSecs,
+                    targetTaskId = taskId,
+                    targetTaskTitle = taskTitle,
+                    soundscape = soundscape,
+                    isPlayingAudio = soundscape != AmbientSoundscape.OFF
+                )
+            )
+        }
+        if (soundscape != AmbientSoundscape.OFF) {
+            audioSynthesizer.play(soundscape)
+        }
+        startFocusTimerLoop()
+    }
+
+    private fun startFocusTimerLoop() {
+        focusTimerJob?.cancel()
+        focusTimerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000L)
+                val current = _localFlags.value.focusSession
+                if (!current.isActive || current.isPaused) continue
+
+                val newRemaining = current.remainingSeconds - 1
+                if (newRemaining <= 0) {
+                    _localFlags.update { flags ->
+                        flags.copy(
+                            focusSession = flags.focusSession.copy(
+                                remainingSeconds = 0,
+                                isActive = false,
+                                isPaused = false,
+                                isPlayingAudio = false
+                            )
+                        )
+                    }
+                    audioSynthesizer.stop()
+                    break
+                } else {
+                    _localFlags.update { flags ->
+                        flags.copy(focusSession = flags.focusSession.copy(remainingSeconds = newRemaining))
+                    }
+                }
+            }
+        }
+    }
+
+    fun toggleFocusPlayPause() {
+        val current = _localFlags.value.focusSession
+        if (!current.isActive) {
+            startFocusSession(
+                taskId = current.targetTaskId,
+                taskTitle = current.targetTaskTitle,
+                durationMinutes = current.totalSeconds / 60,
+                soundscape = current.soundscape
+            )
+            return
+        }
+
+        val willPause = !current.isPaused
+        _localFlags.update { flags ->
+            flags.copy(
+                focusSession = flags.focusSession.copy(
+                    isPaused = willPause,
+                    isPlayingAudio = !willPause && current.soundscape != AmbientSoundscape.OFF
+                )
+            )
+        }
+        if (willPause) {
+            audioSynthesizer.stop()
+        } else if (current.soundscape != AmbientSoundscape.OFF) {
+            audioSynthesizer.play(current.soundscape)
+        }
+    }
+
+    fun resetFocusTimer() {
+        val current = _localFlags.value.focusSession
+        _localFlags.update { flags ->
+            flags.copy(
+                focusSession = flags.focusSession.copy(
+                    remainingSeconds = current.totalSeconds,
+                    isPaused = true,
+                    isPlayingAudio = false
+                )
+            )
+        }
+        audioSynthesizer.stop()
+    }
+
+    fun addFiveMinutesToFocus() {
+        _localFlags.update { flags ->
+            val cur = flags.focusSession
+            val added = 5 * 60
+            flags.copy(
+                focusSession = cur.copy(
+                    remainingSeconds = cur.remainingSeconds + added,
+                    totalSeconds = cur.totalSeconds + added
+                )
+            )
+        }
+    }
+
+    fun selectFocusSoundscape(soundscape: AmbientSoundscape) {
+        _localFlags.update { flags ->
+            flags.copy(
+                focusSession = flags.focusSession.copy(
+                    soundscape = soundscape,
+                    isPlayingAudio = soundscape != AmbientSoundscape.OFF && !flags.focusSession.isPaused
+                )
+            )
+        }
+        val isPaused = _localFlags.value.focusSession.isPaused
+        if (!isPaused && soundscape != AmbientSoundscape.OFF) {
+            audioSynthesizer.play(soundscape)
+        } else {
+            audioSynthesizer.stop()
+        }
+    }
+
+    fun setFocusSheetOpen(open: Boolean) {
+        _localFlags.update { it.copy(isFocusSheetOpen = open) }
+    }
+
+    fun closeFocusSession() {
+        focusTimerJob?.cancel()
+        focusTimerJob = null
+        audioSynthesizer.stop()
+        _localFlags.update { flags ->
+            flags.copy(
+                isFocusSheetOpen = false,
+                focusSession = FocusSessionState()
+            )
+        }
+    }
+
+    // --- GTD Context Filters ---
+    fun selectContextFilter(tag: String?) {
+        _localFlags.update { it.copy(selectedContextTag = tag) }
+    }
+
+    // --- Multi-Task Drafts & Batch Creation ---
+    fun setMultiTaskDrafts(drafts: List<ParsedTaskDraft>) {
+        _localFlags.update {
+            it.copy(
+                pendingMultiTaskDrafts = drafts,
+                isMultiTaskDraftOpen = drafts.size > 1
+            )
+        }
+    }
+
+    fun dismissMultiTaskDrafts() {
+        _localFlags.update {
+            it.copy(
+                pendingMultiTaskDrafts = emptyList(),
+                isMultiTaskDraftOpen = false
+            )
+        }
+    }
+
+    fun confirmAddAllMultiTaskDrafts() {
+        val drafts = _localFlags.value.pendingMultiTaskDrafts
+        if (drafts.isNotEmpty()) {
+            addTasksBatch(drafts)
+        }
+        dismissMultiTaskDrafts()
+    }
+
+    fun addTasksBatch(drafts: List<ParsedTaskDraft>) {
+        viewModelScope.launch {
+            val tasks = drafts.map { draft ->
+                val hasRecurrence = draft.recurrenceRule != null && draft.recurrenceRule.isRecurring
+                val effectiveDueDate = when {
+                    draft.dueDateEpochDay != null -> draft.dueDateEpochDay
+                    hasRecurrence -> draft.recurrenceRule!!.firstMatchingOrAfter(LocalDate.now()).toEpochDay()
+                    draft.bucket == GtdBucket.SCHEDULED -> LocalDate.now().toEpochDay()
+                    else -> null
+                }
+                TaskItem(
+                    id = UUID.randomUUID().toString(),
+                    title = draft.title.trim(),
+                    notes = draft.notes.trim(),
+                    bucket = if (hasRecurrence && draft.bucket == GtdBucket.INBOX) GtdBucket.SCHEDULED else draft.bucket,
+                    dueDateEpochDay = effectiveDueDate,
+                    projectId = draft.projectId,
+                    isFlagged = draft.isFlagged,
+                    isCompleted = false,
+                    recurrenceRule = if (hasRecurrence) draft.recurrenceRule else null,
+                    healthGoal = draft.healthGoal,
+                    contextTag = draft.contextTag,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+            repository.upsertTasks(tasks)
+            tasks.forEach { firestoreSyncManager?.pushTask(it) }
+        }
+    }
+
+    // --- Daily Rituals: Morning & Evening ---
+    fun openMorningRitual() {
+        _localFlags.update { it.copy(dailyRitual = it.dailyRitual.copy(isMorningOpen = true)) }
+    }
+
+    fun openEveningRitual() {
+        _localFlags.update { it.copy(dailyRitual = it.dailyRitual.copy(isEveningOpen = true)) }
+    }
+
+    fun dismissRituals() {
+        _localFlags.update {
+            it.copy(
+                dailyRitual = it.dailyRitual.copy(
+                    isMorningOpen = false,
+                    isEveningOpen = false
+                )
+            )
+        }
+    }
+
+    fun completeMorningRitual(big3TaskIds: Set<String>) {
+        viewModelScope.launch {
+            val tasksToFlag = uiState.value.allTasks.filter { it.id in big3TaskIds && !it.isFlagged }
+            for (t in tasksToFlag) {
+                val updated = t.copy(isFlagged = true)
+                repository.upsertTask(updated)
+                firestoreSyncManager?.pushTask(updated)
+            }
+            _localFlags.update {
+                it.copy(
+                    dailyRitual = it.dailyRitual.copy(
+                        isMorningOpen = false,
+                        top3TaskIds = big3TaskIds,
+                        morningCompletedEpochDay = LocalDate.now().toEpochDay()
+                    )
+                )
+            }
+        }
+    }
+
+    fun completeEveningRitual() {
+        _localFlags.update {
+            it.copy(
+                dailyRitual = it.dailyRitual.copy(
+                    isEveningOpen = false,
+                    eveningCompletedEpochDay = LocalDate.now().toEpochDay()
+                )
+            )
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        focusTimerJob?.cancel()
+        audioSynthesizer.release()
     }
 
     fun toggleSubtaskCompletion(taskId: String, subtaskId: String) {

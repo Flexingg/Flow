@@ -48,7 +48,10 @@ import com.flow.todo.ui.components.FluidTopBar
 import com.flow.todo.ui.components.FluidUsageShieldBanner
 import com.flow.todo.ui.components.FluidWaveSplashOverlay
 import com.flow.todo.ui.components.rememberSplashTransitionState
+import com.flow.todo.domain.model.DailyRitualType
+import com.flow.todo.ui.screens.DailyRitualSheet
 import com.flow.todo.ui.screens.FluidSettingsSheet
+import com.flow.todo.ui.screens.FocusModeSheet
 import com.flow.todo.ui.screens.GoalCreatorSheet
 import com.flow.todo.ui.screens.GoalsScreen
 import com.flow.todo.ui.screens.InboxScreen
@@ -256,6 +259,11 @@ fun FlowAppShell(
                         onToggleSubtask = viewModel::toggleSubtaskCompletion,
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
+                        selectedContextTag = uiState.selectedContextTag,
+                        onSelectContextFilter = viewModel::selectContextFilter,
+                        onStartFocus = { taskId, taskTitle ->
+                            viewModel.startFocusSession(taskId, taskTitle)
+                        },
                         contentPadding = screenContentPadding,
                         listState = inboxListState
                     )
@@ -293,6 +301,16 @@ fun FlowAppShell(
                         onToggleSubtask = viewModel::toggleSubtaskCompletion,
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
+                        selectedContextTag = uiState.selectedContextTag,
+                        onSelectContextFilter = viewModel::selectContextFilter,
+                        onStartFocus = { taskId, taskTitle ->
+                            viewModel.startFocusSession(taskId, taskTitle)
+                        },
+                        isFocusActive = uiState.focusSession.isActive,
+                        focusRemainingFormatted = uiState.focusSession.formattedRemaining,
+                        onOpenFocusSheet = { viewModel.setFocusSheetOpen(true) },
+                        onOpenMorningRitual = viewModel::openMorningRitual,
+                        onOpenEveningRitual = viewModel::openEveningRitual,
                         contentPadding = screenContentPadding,
                         listState = todayListState
                     )
@@ -313,6 +331,9 @@ fun FlowAppShell(
                         onToggleSubtask = viewModel::toggleSubtaskCompletion,
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
+                        onStartFocus = { taskId, taskTitle ->
+                            viewModel.startFocusSession(taskId, taskTitle)
+                        },
                         contentPadding = screenContentPadding,
                         listState = projectsListState
                     )
@@ -411,7 +432,7 @@ fun FlowAppShell(
                 initialTitle = uiState.quickCaptureInitialTitle,
                 autoStartVoice = uiState.quickCaptureAutoVoice,
                 onDismiss = { viewModel.setQuickCaptureOpen(false) },
-                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal, subtasks ->
+                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal, subtasks, contextTag ->
                     viewModel.addTask(
                         title = title,
                         notes = notes,
@@ -421,8 +442,12 @@ fun FlowAppShell(
                         isFlagged = isFlagged,
                         recurrenceRule = recurrenceRule,
                         healthGoal = healthGoal,
-                        subtasks = subtasks
+                        subtasks = subtasks,
+                        contextTag = contextTag
                     )
+                },
+                onBatchAddTasks = { drafts ->
+                    viewModel.addTasksBatch(drafts)
                 }
             )
         }
@@ -475,6 +500,51 @@ fun FlowAppShell(
                 onRestoreSystemPalette = viewModel::restoreOriginalSystemPalette,
                 onRequestHealthPermissions = onRequestHealthPermissions,
                 onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus
+            )
+        }
+
+        // Deep Flow Focus Mode Sheet (Zero-asset procedural soundscapes + liquid timer)
+        if (uiState.isFocusSheetOpen) {
+            FocusModeSheet(
+                focusState = uiState.focusSession,
+                dailyProgress = uiState.dailyProgress,
+                onTogglePlayPause = viewModel::toggleFocusPlayPause,
+                onResetTimer = viewModel::resetFocusTimer,
+                onAddFiveMinutes = viewModel::addFiveMinutesToFocus,
+                onSelectSoundscape = viewModel::selectFocusSoundscape,
+                onCompleteTask = { taskId ->
+                    viewModel.toggleTaskCompletion(taskId)
+                    viewModel.closeFocusSession()
+                },
+                onDismiss = { viewModel.setFocusSheetOpen(false) }
+            )
+        }
+
+        // Daily GTD Rituals Sheet (Morning "Wake to Flow" & Evening "Sunset Review")
+        if (uiState.dailyRitual.isMorningOpen || uiState.dailyRitual.isEveningOpen) {
+            val ritualType = if (uiState.dailyRitual.isMorningOpen) DailyRitualType.MORNING_WAKE else DailyRitualType.EVENING_SUNSET
+            DailyRitualSheet(
+                ritualType = ritualType,
+                todayTasks = uiState.todayTasks,
+                inboxTasks = uiState.inboxTasks,
+                rolloverTasks = uiState.rolloverTasks,
+                healthSnapshot = uiState.healthSnapshot,
+                dailyProgress = uiState.dailyProgress,
+                completedTodayCount = uiState.completedTodayCount,
+                totalTodayTargetCount = uiState.totalTodayTargetCount,
+                onAssignToday = { taskId ->
+                    viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
+                },
+                onMoveBucket = viewModel::updateTaskBucket,
+                onToggleTaskComplete = viewModel::toggleTaskCompletion,
+                onCompleteRitual = { top3 ->
+                    if (ritualType == DailyRitualType.MORNING_WAKE) {
+                        viewModel.completeMorningRitual(top3)
+                    } else {
+                        viewModel.completeEveningRitual()
+                    }
+                },
+                onDismiss = viewModel::dismissRituals
             )
         }
 

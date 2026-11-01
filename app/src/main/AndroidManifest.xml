@@ -6,6 +6,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Audio recording for Voice Brain-Dump speech input -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Optional Location for GTD Contexts (@work, @home, @errands) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Notifications for Active App Usage Shield 80% & 100% Nudges -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
