@@ -424,68 +424,7 @@ fun TodayNextScreen(
                                         modifier = Modifier.fillMaxWidth().height(4.dp)
                                     )
                                 }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Today,
-                                            contentDescription = null,
-                                            tint = FluidTheme.colors.accent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Text(
-                                        text = "Due Today & Flagged",
-                                        fontSize = 17.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = FluidTheme.colors.textPrimary
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(FluidShapes.full)
-                                        .background(FluidTheme.colors.divider)
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    AnimatedContent(
-                                        targetState = todayTasks.size,
-                                        transitionSpec = {
-                                            if (isReducedMotion) {
-                                                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                                            } else {
-                                                (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
-                                                    .togetherWith(
-                                                        scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
-                                                    )
-                                            }
-                                        },
-                                        label = "todayTasksCount"
-                                    ) { count ->
-                                        Text(
-                                            text = "$count",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = FluidTheme.colors.textSecondary
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
 
                             if (todayTasks.isEmpty()) {
                                 Text(
