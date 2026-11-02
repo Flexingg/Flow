@@ -765,7 +765,7 @@ fun CalendarEventRow(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    AnimatedVisibility(
+                    this@Row.AnimatedVisibility(
                         visible = event.isCompleted,
                         enter = scaleIn(spring(dampingRatio = 0.35f, stiffness = 500f)) + fadeIn(),
                         exit = scaleOut() + fadeOut()

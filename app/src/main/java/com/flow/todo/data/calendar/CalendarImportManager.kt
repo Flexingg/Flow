@@ -103,7 +103,7 @@ class CalendarImportManager(
             CalendarContract.Instances.CALENDAR_ID,
             CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
             CalendarContract.Instances.CALENDAR_COLOR,
-            CalendarContract.Instances.ACCOUNT_NAME
+            CalendarContract.Calendars.ACCOUNT_NAME
         )
 
         val existingEvents = runCatching { repository.getAllCalendarEvents() }
@@ -130,7 +130,7 @@ class CalendarImportManager(
                 val calIdIdx = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_ID)
                 val calNameIdx = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
                 val calColorIdx = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_COLOR)
-                val accountIdx = cursor.getColumnIndex(CalendarContract.Instances.ACCOUNT_NAME)
+                val accountIdx = cursor.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
 
                 while (cursor.moveToNext()) {
                     val rawEventId = if (eventIdIdx >= 0) cursor.getLong(eventIdIdx) else 0L
