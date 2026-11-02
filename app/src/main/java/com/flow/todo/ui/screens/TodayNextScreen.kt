@@ -479,9 +479,10 @@ fun TodayNextScreen(
                                 }
                             }
                         }
+                    }
 
-                        // Section 2: Next Actions (GTD Horizon)
-                        FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                    // Section 2: Next Actions (GTD Horizon)
+                    FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
