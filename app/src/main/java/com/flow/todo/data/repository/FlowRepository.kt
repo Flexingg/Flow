@@ -6,6 +6,7 @@ import com.flow.todo.data.local.FlowDao
 import com.flow.todo.data.local.toDomain
 import com.flow.todo.data.local.toEntity
 import com.flow.todo.domain.model.AccessibilityPreferences
+import com.flow.todo.domain.model.CalendarEventItem
 import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
@@ -127,6 +128,37 @@ class FlowRepository(
 
     suspend fun upsertDailyHistoryList(records: List<com.flow.todo.domain.model.DailyCompletionRecord>) {
         dao.upsertDailyHistoryList(records.map { it.toEntity() })
+    }
+
+    fun observeCalendarEvents(): Flow<List<CalendarEventItem>> = dao.observeCalendarEvents().map { entities ->
+        entities.map { it.toDomain() }
+    }
+
+    fun observeCalendarEventsInRange(startMillis: Long, endMillis: Long): Flow<List<CalendarEventItem>> =
+        dao.observeCalendarEventsInRange(startMillis, endMillis).map { entities ->
+            entities.map { it.toDomain() }
+        }
+
+    suspend fun getAllCalendarEvents(): List<CalendarEventItem> = dao.getAllCalendarEvents().map { it.toDomain() }
+
+    suspend fun upsertCalendarEvents(events: List<CalendarEventItem>) {
+        dao.upsertCalendarEvents(events.map { it.toEntity() })
+    }
+
+    suspend fun upsertCalendarEvent(event: CalendarEventItem) {
+        dao.upsertCalendarEvent(event.toEntity())
+    }
+
+    suspend fun updateCalendarEventCompletion(eventId: String, isCompleted: Boolean, completedAt: Long?) {
+        dao.updateCalendarEventCompletion(eventId, isCompleted, completedAt)
+    }
+
+    suspend fun deleteCalendarEvent(eventId: String) {
+        dao.deleteCalendarEvent(eventId)
+    }
+
+    suspend fun clearCalendarEventsBySource(source: String) {
+        dao.clearCalendarEventsBySource(source)
     }
 
     suspend fun updateAccessibilityPreferences(transform: (AccessibilityPreferences) -> AccessibilityPreferences) {

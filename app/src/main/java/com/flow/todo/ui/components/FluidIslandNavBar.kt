@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -242,6 +243,7 @@ fun FluidIslandNavBar(
                                     val icon = when (tab) {
                                         FlowTab.INBOX -> Icons.Rounded.Inbox
                                         FlowTab.TODAY_NEXT -> Icons.Rounded.WbSunny
+                                        FlowTab.CALENDAR -> Icons.Rounded.CalendarMonth
                                         FlowTab.PROJECTS -> Icons.Rounded.Folder
                                         FlowTab.GOALS -> Icons.Rounded.TrackChanges
                                     }

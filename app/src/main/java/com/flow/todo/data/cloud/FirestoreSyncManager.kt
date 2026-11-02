@@ -185,15 +185,31 @@ class FirestoreSyncManager(
         }
 
         val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-        val account: GoogleSignInAccount? = runCatching { task.getResult(ApiException::class.java) }.getOrNull()
-            ?: runCatching { task.await() }.getOrNull()
-            ?: runCatching { GoogleSignIn.getLastSignedInAccount(context) }.getOrNull()
+        var apiException: ApiException? = null
+        val account: GoogleSignInAccount? = try {
+            task.getResult(ApiException::class.java)
+        } catch (e: ApiException) {
+            apiException = e
+            null
+        } catch (_: Throwable) {
+            null
+        } ?: runCatching { task.await() }.getOrNull()
+          ?: runCatching { GoogleSignIn.getLastSignedInAccount(context) }.getOrNull()
 
         if (account == null) {
+            val errorMsg = when (apiException?.statusCode) {
+                10 -> "Google Sign-In requires your own Firebase project (Code 10: DEVELOPER_ERROR). Android Google Play Services requires registering 'com.flow.todo' and its SHA-1 signing fingerprint in Firebase Console. You can configure your Firebase Project ID and Web Client ID below."
+                12500 -> "Google Sign-In failed (Code 12500: SIGN_IN_FAILED). Please ensure Google Sign-In is enabled in your Firebase Console Authentication tab and the Web Client ID matches."
+                12501 -> "Google Sign-In was cancelled."
+                12502 -> "Google Sign-In is currently in progress."
+                7 -> "Network error during Google Sign-In. Please check your internet connection."
+                null -> "Google Sign-In was cancelled or failed."
+                else -> "Google Sign-In failed (Code ${apiException?.statusCode}: ${apiException?.statusMessage ?: apiException?.message}). Firebase project registration with SHA-1 required."
+            }
             _state.update {
                 it.copy(
                     status = CloudSyncStatus.ERROR,
-                    statusMessage = "Google Sign-In was cancelled or failed"
+                    statusMessage = errorMsg
                 )
             }
             return

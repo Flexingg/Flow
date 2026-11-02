@@ -17,6 +17,7 @@ enum class GtdBucket(val label: String, val description: String) {
 enum class FlowTab(val label: String) {
     INBOX("Inbox"),
     TODAY_NEXT("Today"),
+    CALENDAR("Calendar"),
     PROJECTS("Projects"),
     GOALS("Goals")
 }
@@ -742,4 +743,39 @@ data class ContributionChartSummary(
     val totalTasksCompletedInWindow: Int = 0,
     val totalGoalsMetInWindow: Int = 0,
     val activeDaysCount: Int = 0
+)
+
+data class CalendarEventItem(
+    val id: String,
+    val calendarId: Long = 0L,
+    val calendarDisplayName: String = "Device Calendar",
+    val calendarColorHex: Long = 0xFF2F6BFF,
+    val accountName: String = "",
+    val title: String,
+    val description: String = "",
+    val location: String = "",
+    val startEpochMillis: Long,
+    val endEpochMillis: Long,
+    val isAllDay: Boolean = false,
+    val isCompleted: Boolean = false,
+    val completedAt: Long? = null,
+    val source: String = "DEVICE"
+) {
+    val durationMinutes: Long
+        get() = ((endEpochMillis - startEpochMillis) / 60_000L).coerceAtLeast(0L)
+}
+
+data class DeviceCalendarInfo(
+    val id: Long,
+    val displayName: String,
+    val accountName: String,
+    val colorHex: Long,
+    val isSelected: Boolean = true
+)
+
+data class CalendarDailySummary(
+    val epochDay: Long,
+    val totalEventsCount: Int = 0,
+    val completedEventsCount: Int = 0,
+    val momentumContribution: Float = 0f
 )

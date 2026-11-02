@@ -3,6 +3,7 @@ package com.flow.todo.ui.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.flow.todo.data.calendar.CalendarImportManager
 import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
@@ -13,6 +14,8 @@ import com.flow.todo.domain.model.AccessibilityPreferences
 import com.flow.todo.domain.model.AppUsageMetricType
 import com.flow.todo.domain.model.AppUsageShieldAlert
 import com.flow.todo.domain.model.AppUsageSnapshot
+import com.flow.todo.domain.model.CalendarDailySummary
+import com.flow.todo.domain.model.CalendarEventItem
 import com.flow.todo.domain.model.CloudSyncState
 import com.flow.todo.domain.model.ContributionChartSummary
 import com.flow.todo.domain.model.ContributionDayCell
@@ -111,7 +114,14 @@ data class FlowUiState(
     val dailyRitual: DailyRitualState = DailyRitualState(),
     val rolloverTasks: List<TaskItem> = emptyList(),
     val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
-    val isMultiTaskDraftOpen: Boolean = false
+    val isMultiTaskDraftOpen: Boolean = false,
+    val allCalendarEvents: List<CalendarEventItem> = emptyList(),
+    val todayCalendarEvents: List<CalendarEventItem> = emptyList(),
+    val selectedCalendarDate: LocalDate = LocalDate.now(),
+    val selectedDateCalendarEvents: List<CalendarEventItem> = emptyList(),
+    val calendarDailySummary: CalendarDailySummary = CalendarDailySummary(epochDay = LocalDate.now().toEpochDay()),
+    val isCalendarImporting: Boolean = false,
+    val calendarImportMessage: String? = null
 )
 
 class FlowViewModel(
@@ -121,7 +131,8 @@ class FlowViewModel(
     private val appUsageManager: AppUsageManager? = null,
     private val firestoreSyncManager: FirestoreSyncManager? = null,
     private val appUsageShieldMonitor: AppUsageShieldMonitor? = null,
-    private val appContext: android.content.Context? = null
+    private val appContext: android.content.Context? = null,
+    private val calendarImportManager: CalendarImportManager? = null
 ) : ViewModel() {
 
     private data class LocalUiFlags(
@@ -137,7 +148,10 @@ class FlowViewModel(
         val selectedContextTag: String? = null,
         val dailyRitual: DailyRitualState = DailyRitualState(),
         val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
-        val isMultiTaskDraftOpen: Boolean = false
+        val isMultiTaskDraftOpen: Boolean = false,
+        val selectedCalendarDate: LocalDate = LocalDate.now(),
+        val isCalendarImporting: Boolean = false,
+        val calendarImportMessage: String? = null
     )
 
     private data class RepositoryDomainData(
@@ -145,6 +159,7 @@ class FlowViewModel(
         val projects: List<Project>,
         val goals: List<FlowGoal>,
         val dailyHistory: List<DailyCompletionRecord>,
+        val calendarEvents: List<CalendarEventItem>,
         val appUsage: AppUsageSnapshot
     )
 
@@ -187,18 +202,32 @@ class FlowViewModel(
     private val shieldAlertsFlow: Flow<List<AppUsageShieldAlert>> =
         appUsageShieldMonitor?.alerts ?: MutableStateFlow(emptyList())
 
+    private data class CoreDomainEntities(
+        val tasks: List<TaskItem>,
+        val projects: List<Project>,
+        val goals: List<FlowGoal>,
+        val dailyHistory: List<DailyCompletionRecord>,
+        val calendarEvents: List<CalendarEventItem>
+    )
+
     private val domainDataFlow: Flow<RepositoryDomainData> = combine(
-        repository.observeTasks(),
-        repository.observeProjects(),
-        repository.observeGoals(),
-        repository.observeDailyHistory(),
+        combine(
+            repository.observeTasks(),
+            repository.observeProjects(),
+            repository.observeGoals(),
+            repository.observeDailyHistory(),
+            repository.observeCalendarEvents()
+        ) { tasks, projects, goals, history, calendarEvents ->
+            CoreDomainEntities(tasks, projects, goals, history, calendarEvents)
+        },
         appUsageSnapshotFlow
-    ) { tasks, projects, goals, history, usage ->
+    ) { core, usage ->
         RepositoryDomainData(
-            tasks = tasks,
-            projects = projects,
-            goals = goals,
-            dailyHistory = history,
+            tasks = core.tasks,
+            projects = core.projects,
+            goals = core.goals,
+            dailyHistory = core.dailyHistory,
+            calendarEvents = core.calendarEvents,
             appUsage = usage
         )
     }
@@ -342,21 +371,48 @@ class FlowViewModel(
         val completedGoalsCount = activeGoals.count { it.isCompleted }
         val totalGoalsCount = activeGoals.size
 
-        // Fallback task progress for when no goals are configured yet
-        val fallbackTaskProgress = if (todayTasks.isEmpty()) {
-            0f
-        } else {
-            val totalScore = todayTasks.sumOf { task ->
-                when {
-                    task.isCompleted -> 1.0
-                    task.healthGoal != null -> {
-                        val currentVal = sysHealth.healthSnapshot.valueFor(task.healthGoal.metricType)
-                        task.healthGoal.progressFraction(currentVal).toDouble()
+        val calendarEvents = domainData.calendarEvents
+        val zone = ZoneId.systemDefault()
+        val startOfTodayMillis = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val endOfTodayMillis = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1L
+
+        val todayCalendarEvents = calendarEvents.filter {
+            it.startEpochMillis <= endOfTodayMillis && it.endEpochMillis >= startOfTodayMillis
+        }
+        val completedTodayCalendarCount = todayCalendarEvents.count { it.isCompleted }
+
+        val startOfSelectedDayMillis = flags.selectedCalendarDate.atStartOfDay(zone).toInstant().toEpochMilli()
+        val endOfSelectedDayMillis = flags.selectedCalendarDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1L
+        val selectedDateCalendarEvents = calendarEvents.filter {
+            it.startEpochMillis <= endOfSelectedDayMillis && it.endEpochMillis >= startOfSelectedDayMillis
+        }
+
+        val calendarDailySummary = CalendarDailySummary(
+            epochDay = todayEpochDay,
+            totalEventsCount = todayCalendarEvents.size,
+            completedEventsCount = completedTodayCalendarCount,
+            momentumContribution = if (todayCalendarEvents.isNotEmpty()) completedTodayCalendarCount.toFloat() / todayCalendarEvents.size.toFloat() else 0f
+        )
+
+        // Fallback progress for when no goals are configured yet (combines tasks and calendar events)
+        val fallbackTaskProgress = run {
+            val totalTodayItems = todayTasks.size + todayCalendarEvents.size
+            if (totalTodayItems == 0) {
+                0f
+            } else {
+                val taskScore = todayTasks.sumOf { task ->
+                    when {
+                        task.isCompleted -> 1.0
+                        task.healthGoal != null -> {
+                            val currentVal = sysHealth.healthSnapshot.valueFor(task.healthGoal.metricType)
+                            task.healthGoal.progressFraction(currentVal).toDouble()
+                        }
+                        else -> 0.0
                     }
-                    else -> 0.0
                 }
+                val calScore = completedTodayCalendarCount.toDouble()
+                ((taskScore + calScore) / totalTodayItems.toDouble()).toFloat().coerceIn(0f, 1f)
             }
-            (totalScore / todayTasks.size.toDouble()).toFloat().coerceIn(0f, 1f)
         }
 
         // CRITICAL REQUIREMENT: Set dailyProgress = goalMomentumProgress so that all color codes
@@ -372,7 +428,7 @@ class FlowViewModel(
             allTasks = tasks,
             dailyHistory = domainData.dailyHistory,
             todayEpochDay = todayEpochDay,
-            completedTodayTasks = completedTodayCount,
+            completedTodayTasks = completedTodayCount + completedTodayCalendarCount,
             completedTodayGoals = completedGoalsCount,
             totalTodayGoals = totalGoalsCount,
             todayMomentum = effectiveDailyProgress
@@ -419,7 +475,14 @@ class FlowViewModel(
             dailyRitual = flags.dailyRitual,
             rolloverTasks = rolloverTasks,
             pendingMultiTaskDrafts = flags.pendingMultiTaskDrafts,
-            isMultiTaskDraftOpen = flags.isMultiTaskDraftOpen
+            isMultiTaskDraftOpen = flags.isMultiTaskDraftOpen,
+            allCalendarEvents = calendarEvents,
+            todayCalendarEvents = todayCalendarEvents,
+            selectedCalendarDate = flags.selectedCalendarDate,
+            selectedDateCalendarEvents = selectedDateCalendarEvents,
+            calendarDailySummary = calendarDailySummary,
+            isCalendarImporting = flags.isCalendarImporting,
+            calendarImportMessage = flags.calendarImportMessage
         )
     }.stateIn(
         scope = viewModelScope,
@@ -1502,6 +1565,65 @@ class FlowViewModel(
         firestoreSyncManager?.updateFirebaseConfig(config)
     }
 
+    fun selectCalendarDate(date: LocalDate) {
+        _localFlags.update { it.copy(selectedCalendarDate = date) }
+    }
+
+    fun toggleCalendarEventCompletion(eventId: String) {
+        viewModelScope.launch {
+            val event = repository.getAllCalendarEvents().firstOrNull { it.id == eventId } ?: return@launch
+            val newCompleted = !event.isCompleted
+            val completedAt = if (newCompleted) System.currentTimeMillis() else null
+            repository.updateCalendarEventCompletion(eventId, newCompleted, completedAt)
+        }
+    }
+
+    fun importDeviceCalendars() {
+        val manager = calendarImportManager ?: return
+        viewModelScope.launch {
+            _localFlags.update { it.copy(isCalendarImporting = true, calendarImportMessage = "Syncing device calendars...") }
+            val count = manager.importDeviceCalendarEvents()
+            _localFlags.update {
+                it.copy(
+                    isCalendarImporting = false,
+                    calendarImportMessage = if (count > 0) "Successfully imported $count calendar events!" else "No events found or calendar permission required"
+                )
+            }
+        }
+    }
+
+    fun importIcsFromUri(uri: android.net.Uri) {
+        val manager = calendarImportManager ?: return
+        viewModelScope.launch {
+            _localFlags.update { it.copy(isCalendarImporting = true, calendarImportMessage = "Importing .ics calendar...") }
+            val count = manager.importIcsFromUri(uri)
+            _localFlags.update {
+                it.copy(
+                    isCalendarImporting = false,
+                    calendarImportMessage = if (count > 0) "Successfully imported $count events from .ics!" else "Could not read any events from .ics file"
+                )
+            }
+        }
+    }
+
+    fun importIcsContent(content: String) {
+        val manager = calendarImportManager ?: return
+        viewModelScope.launch {
+            _localFlags.update { it.copy(isCalendarImporting = true, calendarImportMessage = "Importing .ics calendar...") }
+            val count = manager.importIcsContent(content)
+            _localFlags.update {
+                it.copy(
+                    isCalendarImporting = false,
+                    calendarImportMessage = if (count > 0) "Successfully imported $count events from .ics!" else "Could not read any events from .ics file"
+                )
+            }
+        }
+    }
+
+    fun clearCalendarImportMessage() {
+        _localFlags.update { it.copy(calendarImportMessage = null) }
+    }
+
     private fun isCompletedToday(completedAt: Long?, todayEpochDay: Long): Boolean {
         if (completedAt == null) return false
         return runCatching {
@@ -1522,7 +1644,8 @@ class FlowViewModel(
             appUsageManager: AppUsageManager? = null,
             firestoreSyncManager: FirestoreSyncManager? = null,
             appUsageShieldMonitor: AppUsageShieldMonitor? = null,
-            appContext: android.content.Context? = null
+            appContext: android.content.Context? = null,
+            calendarImportManager: CalendarImportManager? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1535,7 +1658,8 @@ class FlowViewModel(
                             appUsageManager = appUsageManager,
                             firestoreSyncManager = firestoreSyncManager,
                             appUsageShieldMonitor = appUsageShieldMonitor,
-                            appContext = appContext
+                            appContext = appContext,
+                            calendarImportManager = calendarImportManager
                         ) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

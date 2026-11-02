@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.flow.todo.domain.model.AppUsageMetricType
+import com.flow.todo.domain.model.CalendarEventItem
 import com.flow.todo.domain.model.DailyCompletionRecord
 import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.GoalCategory
@@ -82,6 +83,31 @@ data class DailyHistoryEntity(
     val totalGoalsCount: Int,
     val momentumScore: Float,
     val updatedAt: Long
+)
+
+@Entity(
+    tableName = "calendar_events",
+    indices = [
+        Index(value = ["startEpochMillis"]),
+        Index(value = ["isCompleted"]),
+        Index(value = ["source"])
+    ]
+)
+data class CalendarEventEntity(
+    @PrimaryKey val id: String,
+    val calendarId: Long,
+    val calendarDisplayName: String,
+    val calendarColorHex: Long,
+    val accountName: String,
+    val title: String,
+    val description: String,
+    val location: String,
+    val startEpochMillis: Long,
+    val endEpochMillis: Long,
+    val isAllDay: Boolean,
+    val isCompleted: Boolean,
+    val completedAt: Long?,
+    val source: String
 )
 
 fun ProjectEntity.toDomain(): Project = Project(
@@ -178,4 +204,38 @@ fun DailyCompletionRecord.toEntity(): DailyHistoryEntity = DailyHistoryEntity(
     totalGoalsCount = totalGoalsCount,
     momentumScore = momentumScore,
     updatedAt = updatedAt
+)
+
+fun CalendarEventEntity.toDomain(): CalendarEventItem = CalendarEventItem(
+    id = id,
+    calendarId = calendarId,
+    calendarDisplayName = calendarDisplayName,
+    calendarColorHex = calendarColorHex,
+    accountName = accountName,
+    title = title,
+    description = description,
+    location = location,
+    startEpochMillis = startEpochMillis,
+    endEpochMillis = endEpochMillis,
+    isAllDay = isAllDay,
+    isCompleted = isCompleted,
+    completedAt = completedAt,
+    source = source
+)
+
+fun CalendarEventItem.toEntity(): CalendarEventEntity = CalendarEventEntity(
+    id = id,
+    calendarId = calendarId,
+    calendarDisplayName = calendarDisplayName,
+    calendarColorHex = calendarColorHex,
+    accountName = accountName,
+    title = title,
+    description = description,
+    location = location,
+    startEpochMillis = startEpochMillis,
+    endEpochMillis = endEpochMillis,
+    isAllDay = isAllDay,
+    isCompleted = isCompleted,
+    completedAt = completedAt,
+    source = source
 )

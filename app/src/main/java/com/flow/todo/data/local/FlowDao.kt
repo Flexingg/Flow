@@ -73,4 +73,31 @@ interface FlowDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailyHistoryList(records: List<DailyHistoryEntity>)
+
+    @Query("SELECT * FROM calendar_events ORDER BY startEpochMillis ASC")
+    fun observeCalendarEvents(): Flow<List<CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE startEpochMillis >= :startMillis AND startEpochMillis <= :endMillis ORDER BY startEpochMillis ASC")
+    fun observeCalendarEventsInRange(startMillis: Long, endMillis: Long): Flow<List<CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE id = :eventId LIMIT 1")
+    suspend fun getCalendarEventById(eventId: String): CalendarEventEntity?
+
+    @Query("SELECT * FROM calendar_events")
+    suspend fun getAllCalendarEvents(): List<CalendarEventEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCalendarEvents(events: List<CalendarEventEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCalendarEvent(event: CalendarEventEntity)
+
+    @Query("UPDATE calendar_events SET isCompleted = :isCompleted, completedAt = :completedAt WHERE id = :eventId")
+    suspend fun updateCalendarEventCompletion(eventId: String, isCompleted: Boolean, completedAt: Long?)
+
+    @Query("DELETE FROM calendar_events WHERE id = :eventId")
+    suspend fun deleteCalendarEvent(eventId: String)
+
+    @Query("DELETE FROM calendar_events WHERE source = :source")
+    suspend fun clearCalendarEventsBySource(source: String)
 }

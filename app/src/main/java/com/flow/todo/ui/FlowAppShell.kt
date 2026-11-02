@@ -48,7 +48,14 @@ import com.flow.todo.ui.components.FluidTopBar
 import com.flow.todo.ui.components.FluidUsageShieldBanner
 import com.flow.todo.ui.components.FluidWaveSplashOverlay
 import com.flow.todo.ui.components.rememberSplashTransitionState
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.flow.todo.domain.model.DailyRitualType
+import com.flow.todo.ui.screens.CalendarScreen
 import com.flow.todo.ui.screens.DailyRitualSheet
 import com.flow.todo.ui.screens.FluidSettingsSheet
 import com.flow.todo.ui.screens.FocusModeSheet
@@ -91,15 +98,52 @@ fun FlowAppShell(
         onSplashFinished = { isSplashFinished = true }
     )
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.READ_CALENDAR] == true) {
+            viewModel.importDeviceCalendars()
+        }
+    }
+
+    val requestCalendarPermissions: () -> Unit = {
+        val hasRead = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CALENDAR
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasRead) {
+            viewModel.importDeviceCalendars()
+        } else {
+            calendarPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_CALENDAR,
+                    Manifest.permission.WRITE_CALENDAR
+                )
+            )
+        }
+    }
+
+    val pickIcsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importIcsFromUri(uri)
+        }
+    }
+
     // Separate scroll states per tab so scroll positions are retained during tab navigation
     val inboxListState = rememberLazyListState()
     val todayListState = rememberLazyListState()
+    val calendarListState = rememberLazyListState()
     val projectsListState = rememberLazyListState()
     val goalsListState = rememberLazyListState()
 
     val currentListState = when (uiState.selectedTab) {
         FlowTab.INBOX -> inboxListState
         FlowTab.TODAY_NEXT -> todayListState
+        FlowTab.CALENDAR -> calendarListState
         FlowTab.PROJECTS -> projectsListState
         FlowTab.GOALS -> goalsListState
     }
@@ -128,6 +172,15 @@ fun FlowAppShell(
                 "$completed of $total today • $upcoming queued this week"
             } else {
                 "No urgent commitments today • $upcoming queued this week"
+            }
+        }
+        FlowTab.CALENDAR -> {
+            val total = uiState.todayCalendarEvents.size
+            val completed = uiState.todayCalendarEvents.count { it.isCompleted }
+            "Calendar" to if (total > 0) {
+                "$completed of $total events completed today"
+            } else {
+                "Schedule & Agenda • Check events off as you go"
             }
         }
         FlowTab.PROJECTS -> {
@@ -313,6 +366,28 @@ fun FlowAppShell(
                         onOpenEveningRitual = viewModel::openEveningRitual,
                         contentPadding = screenContentPadding,
                         listState = todayListState
+                    )
+
+                    FlowTab.CALENDAR -> CalendarScreen(
+                        calendarEvents = uiState.allCalendarEvents,
+                        scheduledTasks = uiState.allTasks,
+                        selectedDate = uiState.selectedCalendarDate,
+                        dailySummary = uiState.calendarDailySummary,
+                        dailyProgress = uiState.dailyProgress,
+                        isImporting = uiState.isCalendarImporting,
+                        importMessage = uiState.calendarImportMessage,
+                        onSelectDate = viewModel::selectCalendarDate,
+                        onToggleEventCompletion = viewModel::toggleCalendarEventCompletion,
+                        onToggleTaskCompletion = viewModel::toggleTaskCompletion,
+                        onImportDeviceCalendars = requestCalendarPermissions,
+                        onPickIcsFile = {
+                            runCatching {
+                                pickIcsLauncher.launch(arrayOf("text/calendar", "*/*"))
+                            }
+                        },
+                        onClearImportMessage = viewModel::clearCalendarImportMessage,
+                        contentPadding = screenContentPadding,
+                        listState = calendarListState
                     )
 
                     FlowTab.PROJECTS -> ProjectsScreen(

@@ -18,6 +18,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.flow.todo.data.calendar.CalendarImportManager
 import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.local.FlowDatabase
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
         val appUsageManager = AppUsageManager(applicationContext)
         val appUsageShieldMonitor = AppUsageShieldMonitor(applicationContext)
         firestoreSyncManager = FirestoreSyncManager(applicationContext, repository)
+        val calendarImportManager = CalendarImportManager(applicationContext, repository)
 
         viewModel = ViewModelProvider(
             this,
@@ -62,7 +64,8 @@ class MainActivity : ComponentActivity() {
                 appUsageManager = appUsageManager,
                 appUsageShieldMonitor = appUsageShieldMonitor,
                 firestoreSyncManager = firestoreSyncManager,
-                appContext = applicationContext
+                appContext = applicationContext,
+                calendarImportManager = calendarImportManager
             )
         )[FlowViewModel::class.java]
 

@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Calendar Import & Event Check-off Permissions -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
     <!-- Notifications for Active App Usage Shield 80% & 100% Nudges -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

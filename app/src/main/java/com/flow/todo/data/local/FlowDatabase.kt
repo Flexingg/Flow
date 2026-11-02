@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [TaskEntity::class, ProjectEntity::class, GoalEntity::class, DailyHistoryEntity::class],
-    version = 8,
+    entities = [TaskEntity::class, ProjectEntity::class, GoalEntity::class, DailyHistoryEntity::class, CalendarEventEntity::class],
+    version = 9,
     exportSchema = false
 )
 abstract class FlowDatabase : RoomDatabase() {
