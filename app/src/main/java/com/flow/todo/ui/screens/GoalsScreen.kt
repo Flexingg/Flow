@@ -181,8 +181,226 @@ fun GoalsScreen(
             Spacer(modifier = Modifier.height(FluidSpacing.sm))
         }
 
-        // 1. HERO GOAL MOMENTUM SPECTRUM CARD
+        // 1. TOP ACTION & CATEGORY HEADER (GOALS MOST VISIBLE / AT TOP)
         item {
+            FluidInsetCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentGlowColor = momentumAccentColor.copy(alpha = 0.35f)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(FluidSpacing.sm)
+                ) {
+                    // Top Actions Row: "+ Create Goal" button + "Colors 🎨" + Shizuku status
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FluidPillButton(
+                            text = "+ Create Goal",
+                            onClick = onOpenGoalCreator,
+                            isPrimary = true,
+                            leadingIcon = Icons.Rounded.Add,
+                            modifier = Modifier.weight(1f).height(38.dp)
+                        )
+
+                        // Pick Colors pill button
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(colors.accent.copy(alpha = 0.10f))
+                                .border(1.dp, colors.accent.copy(alpha = 0.24f), FluidShapes.full)
+                                .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "Colors 🎨",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = colors.accent
+                            )
+                        }
+
+                        // Shizuku pill chip
+                        val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
+                        val shizukuText = if (isSyncActive) "OS Sync" else "OS Palette →"
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(
+                                    if (isSyncActive) colors.success.copy(alpha = 0.12f)
+                                    else colors.accent.copy(alpha = 0.10f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSyncActive) colors.success.copy(alpha = 0.28f)
+                                    else colors.accent.copy(alpha = 0.24f),
+                                    FluidShapes.full
+                                )
+                                .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSyncActive) colors.success else colors.accent)
+                                )
+                                Text(
+                                    text = shizukuText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isSyncActive) colors.success else colors.accent
+                                )
+                            }
+                        }
+                    }
+
+                    // Progress glance row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(momentumAccentColor)
+                            )
+                            Text(
+                                text = "$completedGoalsCount of $totalGoalsCount goals achieved • $stageLabel",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // Percentage Badge
+                        Box(
+                            modifier = Modifier
+                                .clip(FluidShapes.full)
+                                .background(momentumAccentColor.copy(alpha = 0.12f))
+                                .border(1.dp, momentumAccentColor.copy(alpha = 0.28f), FluidShapes.full)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "$progressPercent%",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = momentumAccentColor
+                            )
+                        }
+                    }
+
+                    // Mini Glowing Progress Bar
+                    FluidGlowingProgressBar(
+                        progress = clampedProgress,
+                        accentColor = momentumAccentColor,
+                        modifier = Modifier.fillMaxWidth().height(4.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+        }
+
+        // 2. CATEGORY FILTER CHIPS
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                GoalFilterTab.entries.forEach { tab ->
+                    val count = when (tab) {
+                        GoalFilterTab.ALL -> evaluatedGoals.size
+                        GoalFilterTab.TASK -> evaluatedGoals.count { it.goal.category == GoalCategory.TASK_COMPLETION }
+                        GoalFilterTab.MACROS -> evaluatedGoals.count {
+                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient == true
+                        }
+                        GoalFilterTab.HEALTH -> evaluatedGoals.count {
+                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient != true
+                        }
+                        GoalFilterTab.APP -> evaluatedGoals.count { it.goal.category == GoalCategory.APP_USAGE }
+                    }
+                    val label = "${tab.label} ($count)"
+                    FluidFilterChip(
+                        label = label,
+                        selected = selectedFilter == tab,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selectedFilter = tab
+                        }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(FluidSpacing.sm))
+        }
+
+        // 3. ACTIVE GOAL BARS LIST (DIRECTLY AT THE TOP!)
+        if (filteredGoals.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fluidGlass(GlassLevel.THIN, FluidShapes.lg)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.TrackChanges,
+                            contentDescription = null,
+                            tint = colors.accent.copy(alpha = 0.50f),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = if (totalGoalsCount == 0) "No Goals Created Yet" else "No Goals in this Category",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = "Tap '+ Create Goal' above or pick a 1-tap preset below to start your Living Flow meter.",
+                            fontSize = 13.sp,
+                            color = colors.textTertiary
+                        )
+                    }
+                }
+            }
+        } else {
+            items(filteredGoals, key = { it.goal.id }) { evaluatedGoal ->
+                val projectColorHex = evaluatedGoal.goal.projectId?.let { pid ->
+                    projects.firstOrNull { it.id == pid }?.colorHex
+                }
+                FluidGoalMeterCard(
+                    evaluatedGoal = evaluatedGoal,
+                    projectColorHex = projectColorHex,
+                    onDeleteGoal = { onDeleteGoal(evaluatedGoal.goal.id) },
+                    modifier = Modifier.padding(bottom = FluidSpacing.sm)
+                )
+            }
+        }
+
+        // 4. LIVING GOAL MOMENTUM SPECTRUM HERO CARD
+        item {
+            Spacer(modifier = Modifier.height(FluidSpacing.md))
             FluidInsetCard(
                 modifier = Modifier.fillMaxWidth(),
                 accentGlowColor = momentumAccentColor.copy(alpha = 0.40f)
@@ -457,22 +675,11 @@ fun GoalsScreen(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(FluidSpacing.md))
-
-                    // "+ Create Goal" Primary Button
-                    FluidPillButton(
-                        text = "+ Create Goal",
-                        onClick = onOpenGoalCreator,
-                        isPrimary = true,
-                        leadingIcon = Icons.Rounded.Add,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         }
 
-        // CONTRIBUTION HEATMAP CHART
+        // 5. CONTRIBUTION HEATMAP CHART
         item {
             Spacer(modifier = Modifier.height(FluidSpacing.md))
             FluidContributionChart(
@@ -481,93 +688,7 @@ fun GoalsScreen(
             )
         }
 
-        // 2. CATEGORY FILTER CHIPS
-        item {
-            Spacer(modifier = Modifier.height(FluidSpacing.md))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                GoalFilterTab.entries.forEach { tab ->
-                    val count = when (tab) {
-                        GoalFilterTab.ALL -> evaluatedGoals.size
-                        GoalFilterTab.TASK -> evaluatedGoals.count { it.goal.category == GoalCategory.TASK_COMPLETION }
-                        GoalFilterTab.MACROS -> evaluatedGoals.count {
-                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient == true
-                        }
-                        GoalFilterTab.HEALTH -> evaluatedGoals.count {
-                            it.goal.category == GoalCategory.HEALTH_CONNECT && it.goal.healthMetric?.isMacronutrient != true
-                        }
-                        GoalFilterTab.APP -> evaluatedGoals.count { it.goal.category == GoalCategory.APP_USAGE }
-                    }
-                    val label = "${tab.label} ($count)"
-                    FluidFilterChip(
-                        label = label,
-                        selected = selectedFilter == tab,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            selectedFilter = tab
-                        }
-                    )
-                }
-            }
-        }
-
-        // 3. ACTIVE GOAL BARS LIST
-        item {
-            Spacer(modifier = Modifier.height(FluidSpacing.sm))
-        }
-
-        if (filteredGoals.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fluidGlass(GlassLevel.THIN, FluidShapes.lg)
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.TrackChanges,
-                            contentDescription = null,
-                            tint = colors.accent.copy(alpha = 0.50f),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Text(
-                            text = if (totalGoalsCount == 0) "No Goals Created Yet" else "No Goals in this Category",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = "Tap '+ Create Goal' above or pick a 1-tap preset below to start your Living Flow meter.",
-                            fontSize = 13.sp,
-                            color = colors.textTertiary
-                        )
-                    }
-                }
-            }
-        } else {
-            items(filteredGoals, key = { it.goal.id }) { evaluatedGoal ->
-                val projectColorHex = evaluatedGoal.goal.projectId?.let { pid ->
-                    projects.firstOrNull { it.id == pid }?.colorHex
-                }
-                FluidGoalMeterCard(
-                    evaluatedGoal = evaluatedGoal,
-                    projectColorHex = projectColorHex,
-                    onDeleteGoal = { onDeleteGoal(evaluatedGoal.goal.id) },
-                    modifier = Modifier.padding(bottom = FluidSpacing.sm)
-                )
-            }
-        }
-
-        // 4. PERMISSIONS & LIVE TELEMETRY STATUS ROW
+        // 6. PERMISSIONS & LIVE TELEMETRY STATUS ROW
         item {
             Spacer(modifier = Modifier.height(FluidSpacing.md))
             FluidInsetCard(

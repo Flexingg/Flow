@@ -153,317 +153,8 @@ fun TodayNextScreen(
             Spacer(modifier = Modifier.height(FluidSpacing.sm))
         }
 
-        // Daily Momentum Hero Card
-        item {
-            FluidInsetCard(
-                modifier = Modifier.fillMaxWidth(),
-                accentGlowColor = momentumAccentColor.copy(alpha = 0.40f)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "DAILY MOMENTUM",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.2.sp,
-                            color = momentumAccentColor
-                        )
-
-                        // Percentage Badge with Bouncy Slide + ScaleIn
-                        Box(
-                            modifier = Modifier
-                                .clip(FluidShapes.full)
-                                .background(momentumAccentColor.copy(alpha = 0.12f))
-                                .border(1.dp, momentumAccentColor.copy(alpha = 0.28f), FluidShapes.full)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            AnimatedContent(
-                                targetState = progressPercent,
-                                transitionSpec = {
-                                    if (isReducedMotion) {
-                                        fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                                    } else {
-                                        val direction = if (targetState > initialState) 1 else -1
-                                        (slideInVertically(
-                                            animationSpec = FluidSprings.release(false),
-                                            initialOffsetY = { 16 * direction }
-                                        ) + scaleIn(
-                                            initialScale = 0.80f,
-                                            animationSpec = FluidSprings.release(false)
-                                        ) + fadeIn(tween(150))).togetherWith(
-                                            slideOutVertically(
-                                                animationSpec = FluidSprings.release(false),
-                                                targetOffsetY = { -16 * direction }
-                                            ) + scaleOut(
-                                                targetScale = 0.80f,
-                                                animationSpec = FluidSprings.release(false)
-                                            ) + fadeOut(tween(150))
-                                        )
-                                    }
-                                },
-                                label = "momentumPercentage"
-                            ) { percent ->
-                                Text(
-                                    text = "$percent%",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = momentumAccentColor
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(FluidSpacing.sm))
-
-                    // Large expressive numeral showing completed / total with bouncy vertical roll
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        AnimatedContent(
-                            targetState = completedTodayCount,
-                            transitionSpec = {
-                                if (isReducedMotion) {
-                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                                } else {
-                                    val direction = if (targetState > initialState) 1 else -1
-                                    (slideInVertically(
-                                        animationSpec = FluidSprings.release(false),
-                                        initialOffsetY = { 28 * direction }
-                                    ) + scaleIn(
-                                        initialScale = 0.75f,
-                                        animationSpec = FluidSprings.release(false)
-                                    ) + fadeIn(tween(150))).togetherWith(
-                                        slideOutVertically(
-                                            animationSpec = FluidSprings.release(false),
-                                            targetOffsetY = { -28 * direction }
-                                        ) + scaleOut(
-                                            targetScale = 0.75f,
-                                            animationSpec = FluidSprings.release(false)
-                                        ) + fadeOut(tween(150))
-                                    )
-                                }
-                            },
-                            label = "completedTodayNumeral"
-                        ) { count ->
-                            Text(
-                                text = "$count",
-                                fontSize = 40.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = (-0.5).sp,
-                                color = FluidTheme.colors.textPrimary
-                            )
-                        }
-
-                        Text(
-                            text = " / $totalTodayTargetCount",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = FluidTheme.colors.textTertiary,
-                            modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.width(FluidSpacing.sm))
-                        Text(
-                            text = "completed today",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = FluidTheme.colors.textSecondary,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
-
-                    Text(
-                        text = when {
-                            totalTodayTargetCount == 0 -> "No scheduled commitments today. Pick an action from your horizon."
-                            completedTodayCount >= totalTodayTargetCount -> "All daily targets fulfilled • Pure Living Flow ✨"
-                            else -> "Keep your momentum going. Focus on the next immediate physical action."
-                        },
-                        fontSize = 13.sp,
-                        color = FluidTheme.colors.textSecondary
-                    )
-
-                    Spacer(modifier = Modifier.height(FluidSpacing.md))
-
-                    // Luminous comet progress bar
-                    FluidGlowingProgressBar(
-                        progress = effectiveProgress,
-                        accentColor = momentumAccentColor,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(FluidSpacing.md))
-
-                    // 5-Stop Daily Momentum Spectrum Bar
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 5 Glowing Spectrum Dots + Stage Label
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val spectrumDots = MomentumSpectrum.stops
-                            val activeDotIndex = when {
-                                effectiveProgress >= 0.80f -> 4
-                                effectiveProgress >= 0.60f -> 3
-                                effectiveProgress >= 0.40f -> 2
-                                effectiveProgress >= 0.20f -> 1
-                                else -> 0
-                            }
-
-                            spectrumDots.forEachIndexed { idx, dotColor ->
-                                val isActive = idx == activeDotIndex
-                                Box(
-                                    modifier = Modifier
-                                        .size(if (isActive) 12.dp else 8.dp)
-                                        .then(
-                                            if (isActive) {
-                                                Modifier.shadow(elevation = 6.dp, shape = CircleShape, spotColor = dotColor)
-                                            } else Modifier
-                                        )
-                                        .clip(CircleShape)
-                                        .background(if (isActive) dotColor else dotColor.copy(alpha = 0.35f))
-                                        .border(
-                                            width = if (isActive) 1.5.dp else 0.5.dp,
-                                            color = if (isActive) Color.White.copy(alpha = 0.85f) else Color.Transparent,
-                                            shape = CircleShape
-                                        )
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            Text(
-                                text = MomentumSpectrum.stageLabel(effectiveProgress),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FluidTheme.colors.textSecondary
-                            )
-                        }
-
-                        // Shizuku System UI Sync status pill chip
-                        val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
-                        val shizukuPillText = if (isSyncActive) "System UI Sync: Active" else "Sync System UI Colors →"
-                        Box(
-                            modifier = Modifier
-                                .clip(FluidShapes.full)
-                                .background(
-                                    if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.12f)
-                                    else FluidTheme.colors.accent.copy(alpha = 0.10f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.28f)
-                                    else FluidTheme.colors.accent.copy(alpha = 0.24f),
-                                    FluidShapes.full
-                                )
-                                .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent)
-                                )
-                                Text(
-                                    text = shizukuPillText,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // GTD Daily Rituals & Deep Flow Focus Mode Card
-        item {
-            Spacer(modifier = Modifier.height(FluidSpacing.md))
-            FluidInsetCard(
-                modifier = Modifier.fillMaxWidth(),
-                accentGlowColor = momentumAccentColor.copy(alpha = 0.25f)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isFocusActive) Icons.Rounded.Headphones else Icons.Rounded.SelfImprovement,
-                                contentDescription = null,
-                                tint = FluidTheme.colors.accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = if (isFocusActive) "Deep Flow Focus Active" else "GTD Rituals & Focus",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FluidTheme.colors.textPrimary
-                            )
-                            Text(
-                                text = if (isFocusActive) "$focusRemainingFormatted remaining • Ambient soundscape" else "Morning alignment & sunset review",
-                                fontSize = 11.sp,
-                                color = FluidTheme.colors.textSecondary,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FluidPillButton(
-                            text = if (isFocusActive) "Timer" else "Focus",
-                            onClick = onOpenFocusSheet,
-                            isPrimary = isFocusActive,
-                            modifier = Modifier.height(32.dp)
-                        )
-                        FluidPillButton(
-                            text = "Morning",
-                            onClick = onOpenMorningRitual,
-                            isPrimary = false,
-                            modifier = Modifier.height(32.dp)
-                        )
-                        FluidPillButton(
-                            text = "Sunset",
-                            onClick = onOpenEveningRitual,
-                            isPrimary = false,
-                            modifier = Modifier.height(32.dp)
-                        )
-                    }
-                }
-            }
-        }
-
         // Living Flow Glass Segmented Mode Switcher
         item {
-            Spacer(modifier = Modifier.height(FluidSpacing.md))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -649,25 +340,90 @@ fun TodayNextScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(FluidSpacing.lg)
                     ) {
-                        // Section 0: Dedicated Living Flow Goal Bar
-                        FluidGoalSpectrumBar(
-                            evaluatedGoals = evaluatedGoals,
-                            goalMomentumProgress = effectiveProgress,
-                            shizukuReady = shizukuStatus.isReady,
-                            syncSystemColors = syncSystemColorsWithShizuku,
-                            onOpenGoalsTab = onOpenGoalsTab,
-                            onOpenGoalCreator = onOpenGoalCreator,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        // 1. DUE TODAY & FLAGGED (MOST VISIBLE / AT TOP)
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = momentumAccentColor.copy(alpha = 0.35f)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(momentumAccentColor.copy(alpha = 0.12f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Today,
+                                                contentDescription = null,
+                                                tint = momentumAccentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "Due Today & Flagged",
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = FluidTheme.colors.textPrimary
+                                            )
+                                            Text(
+                                                text = if (totalTodayTargetCount > 0) "$completedTodayCount of $totalTodayTargetCount completed • $progressPercent%"
+                                                else "Daily actions & priority commitments",
+                                                fontSize = 11.sp,
+                                                color = FluidTheme.colors.textSecondary
+                                            )
+                                        }
+                                    }
 
-                        // Contribution Heatmap Chart
-                        FluidContributionChart(
-                            summary = contributionChart,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(FluidShapes.full)
+                                            .background(momentumAccentColor.copy(alpha = 0.12f))
+                                            .border(1.dp, momentumAccentColor.copy(alpha = 0.28f), FluidShapes.full)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        AnimatedContent(
+                                            targetState = todayTasks.size,
+                                            transitionSpec = {
+                                                if (isReducedMotion) {
+                                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                                } else {
+                                                    (scaleIn(initialScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeIn(tween(150)))
+                                                        .togetherWith(
+                                                            scaleOut(targetScale = 0.80f, animationSpec = FluidSprings.release(false)) + fadeOut(tween(150))
+                                                        )
+                                                }
+                                            },
+                                            label = "todayTasksCount"
+                                        ) { count ->
+                                            Text(
+                                                text = "$count",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = momentumAccentColor
+                                            )
+                                        }
+                                    }
+                                }
 
-                        // Section 1: Due Today & Flagged
-                        FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                                if (totalTodayTargetCount > 0) {
+                                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+                                    FluidGlowingProgressBar(
+                                        progress = effectiveProgress,
+                                        accentColor = momentumAccentColor,
+                                        modifier = Modifier.fillMaxWidth().height(4.dp)
+                                    )
+                                }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -911,7 +667,327 @@ fun TodayNextScreen(
                             }
                         }
 
-                        // Up Next This Week preview card
+                        // 3. DAILY MOMENTUM HERO CARD
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = momentumAccentColor.copy(alpha = 0.40f)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "DAILY MOMENTUM",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.2.sp,
+                                        color = momentumAccentColor
+                                    )
+
+                                    // Percentage Badge with Bouncy Slide + ScaleIn
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(FluidShapes.full)
+                                            .background(momentumAccentColor.copy(alpha = 0.12f))
+                                            .border(1.dp, momentumAccentColor.copy(alpha = 0.28f), FluidShapes.full)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        AnimatedContent(
+                                            targetState = progressPercent,
+                                            transitionSpec = {
+                                                if (isReducedMotion) {
+                                                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                                } else {
+                                                    val direction = if (targetState > initialState) 1 else -1
+                                                    (slideInVertically(
+                                                        animationSpec = FluidSprings.release(false),
+                                                        initialOffsetY = { 16 * direction }
+                                                    ) + scaleIn(
+                                                        initialScale = 0.80f,
+                                                        animationSpec = FluidSprings.release(false)
+                                                    ) + fadeIn(tween(150))).togetherWith(
+                                                        slideOutVertically(
+                                                            animationSpec = FluidSprings.release(false),
+                                                            targetOffsetY = { -16 * direction }
+                                                        ) + scaleOut(
+                                                            targetScale = 0.80f,
+                                                            animationSpec = FluidSprings.release(false)
+                                                        ) + fadeOut(tween(150))
+                                                    )
+                                                }
+                                            },
+                                            label = "momentumPercentage"
+                                        ) { percent ->
+                                            Text(
+                                                text = "$percent%",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = momentumAccentColor
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.sm))
+
+                                // Large expressive numeral showing completed / total with bouncy vertical roll
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    AnimatedContent(
+                                        targetState = completedTodayCount,
+                                        transitionSpec = {
+                                            if (isReducedMotion) {
+                                                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                                            } else {
+                                                val direction = if (targetState > initialState) 1 else -1
+                                                (slideInVertically(
+                                                    animationSpec = FluidSprings.release(false),
+                                                    initialOffsetY = { 28 * direction }
+                                                ) + scaleIn(
+                                                    initialScale = 0.75f,
+                                                    animationSpec = FluidSprings.release(false)
+                                                ) + fadeIn(tween(150))).togetherWith(
+                                                    slideOutVertically(
+                                                        animationSpec = FluidSprings.release(false),
+                                                        targetOffsetY = { -28 * direction }
+                                                    ) + scaleOut(
+                                                        targetScale = 0.75f,
+                                                        animationSpec = FluidSprings.release(false)
+                                                    ) + fadeOut(tween(150))
+                                                )
+                                            }
+                                        },
+                                        label = "completedTodayNumeral"
+                                    ) { count ->
+                                        Text(
+                                            text = "$count",
+                                            fontSize = 40.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            letterSpacing = (-0.5).sp,
+                                            color = FluidTheme.colors.textPrimary
+                                        )
+                                    }
+
+                                    Text(
+                                        text = " / $totalTodayTargetCount",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = FluidTheme.colors.textTertiary,
+                                        modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(FluidSpacing.sm))
+                                    Text(
+                                        text = "completed today",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = FluidTheme.colors.textSecondary,
+                                        modifier = Modifier.padding(bottom = 6.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                                Text(
+                                    text = when {
+                                        totalTodayTargetCount == 0 -> "No scheduled commitments today. Pick an action from your horizon."
+                                        completedTodayCount >= totalTodayTargetCount -> "All daily targets fulfilled • Pure Living Flow ✨"
+                                        else -> "Keep your momentum going. Focus on the next immediate physical action."
+                                    },
+                                    fontSize = 13.sp,
+                                    color = FluidTheme.colors.textSecondary
+                                )
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                                // Luminous comet progress bar
+                                FluidGlowingProgressBar(
+                                    progress = effectiveProgress,
+                                    accentColor = momentumAccentColor,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(FluidSpacing.md))
+
+                                // 5-Stop Daily Momentum Spectrum Bar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // 5 Glowing Spectrum Dots + Stage Label
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val spectrumDots = MomentumSpectrum.stops
+                                        val activeDotIndex = when {
+                                            effectiveProgress >= 0.80f -> 4
+                                            effectiveProgress >= 0.60f -> 3
+                                            effectiveProgress >= 0.40f -> 2
+                                            effectiveProgress >= 0.20f -> 1
+                                            else -> 0
+                                        }
+
+                                        spectrumDots.forEachIndexed { idx, dotColor ->
+                                            val isActive = idx == activeDotIndex
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(if (isActive) 12.dp else 8.dp)
+                                                    .then(
+                                                        if (isActive) {
+                                                            Modifier.shadow(elevation = 6.dp, shape = CircleShape, spotColor = dotColor)
+                                                        } else Modifier
+                                                    )
+                                                    .clip(CircleShape)
+                                                    .background(if (isActive) dotColor else dotColor.copy(alpha = 0.35f))
+                                                    .border(
+                                                        width = if (isActive) 1.5.dp else 0.5.dp,
+                                                        color = if (isActive) Color.White.copy(alpha = 0.85f) else Color.Transparent,
+                                                        shape = CircleShape
+                                                    )
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(4.dp))
+
+                                        Text(
+                                            text = MomentumSpectrum.stageLabel(effectiveProgress),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.textSecondary
+                                        )
+                                    }
+
+                                    // Shizuku System UI Sync status pill chip
+                                    val isSyncActive = syncSystemColorsWithShizuku && shizukuStatus.isReady
+                                    val shizukuPillText = if (isSyncActive) "System UI Sync: Active" else "Sync System UI Colors →"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(FluidShapes.full)
+                                            .background(
+                                                if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.12f)
+                                                else FluidTheme.colors.accent.copy(alpha = 0.10f)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isSyncActive) FluidTheme.colors.success.copy(alpha = 0.28f)
+                                                else FluidTheme.colors.accent.copy(alpha = 0.24f),
+                                                FluidShapes.full
+                                            )
+                                            .fluidInteractive(pressScale = 0.94f, onClick = onOpenSettings)
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent)
+                                            )
+                                            Text(
+                                                text = shizukuPillText,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = if (isSyncActive) FluidTheme.colors.success else FluidTheme.colors.accent
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. DEDICATED LIVING GOAL BAR
+                        FluidGoalSpectrumBar(
+                            evaluatedGoals = evaluatedGoals,
+                            goalMomentumProgress = effectiveProgress,
+                            shizukuReady = shizukuStatus.isReady,
+                            syncSystemColors = syncSystemColorsWithShizuku,
+                            onOpenGoalsTab = onOpenGoalsTab,
+                            onOpenGoalCreator = onOpenGoalCreator,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // 5. GTD DAILY RITUALS & DEEP FLOW FOCUS MODE CARD
+                        FluidInsetCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            accentGlowColor = momentumAccentColor.copy(alpha = 0.25f)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(FluidTheme.colors.accent.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFocusActive) Icons.Rounded.Headphones else Icons.Rounded.SelfImprovement,
+                                            contentDescription = null,
+                                            tint = FluidTheme.colors.accent,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = if (isFocusActive) "Deep Flow Focus Active" else "GTD Rituals & Focus",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = FluidTheme.colors.textPrimary
+                                        )
+                                        Text(
+                                            text = if (isFocusActive) "$focusRemainingFormatted remaining • Ambient soundscape" else "Morning alignment & sunset review",
+                                            fontSize = 11.sp,
+                                            color = FluidTheme.colors.textSecondary,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FluidPillButton(
+                                        text = if (isFocusActive) "Timer" else "Focus",
+                                        onClick = onOpenFocusSheet,
+                                        isPrimary = isFocusActive,
+                                        modifier = Modifier.height(32.dp)
+                                    )
+                                    FluidPillButton(
+                                        text = "Morning",
+                                        onClick = onOpenMorningRitual,
+                                        isPrimary = false,
+                                        modifier = Modifier.height(32.dp)
+                                    )
+                                    FluidPillButton(
+                                        text = "Sunset",
+                                        onClick = onOpenEveningRitual,
+                                        isPrimary = false,
+                                        modifier = Modifier.height(32.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // 6. CONTRIBUTION HEATMAP CHART
+                        FluidContributionChart(
+                            summary = contributionChart,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // 7. UP NEXT THIS WEEK PREVIEW
                         val upcomingPreviewTasks = remember(upcomingWeekDays) {
                             upcomingWeekDays.flatMap { day ->
                                 day.tasks.map { task -> day to task }
