@@ -23,4 +23,7 @@
     <string name="shortcut_goals_long">Open Goals &amp; Heatmap</string>
     <string name="shortcut_today_short">Today &amp; Next</string>
     <string name="shortcut_today_long">Open Today &amp; Next Actions</string>
+    <string name="coach_widget_label">AI Coach</string>
+    <string name="coach_widget_refresh">Get a new coach message</string>
+    <string name="coach_widget_description">Your AI coach persona tells you what you are doing well and what to work on next</string>
 </resources>

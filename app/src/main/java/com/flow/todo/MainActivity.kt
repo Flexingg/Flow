@@ -18,6 +18,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.flow.todo.coach.data.CoachController
 import com.flow.todo.data.calendar.CalendarImportManager
 import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
@@ -30,6 +31,7 @@ import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.ui.FlowAppShell
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidTheme
+import com.flow.todo.widget.FlowCoachWidgetProvider
 import com.flow.todo.widget.FlowGlassWidgetProvider
 
 class MainActivity : ComponentActivity() {
@@ -181,6 +183,12 @@ class MainActivity : ComponentActivity() {
             FlowGlassWidgetProvider.ACTION_OPEN_TODAY -> {
                 viewModel.selectTab(FlowTab.TODAY_NEXT)
             }
+            FlowCoachWidgetProvider.ACTION_OPEN_COACH -> {
+                viewModel.selectTab(FlowTab.TODAY_NEXT)
+                val coach = CoachController.get(applicationContext)
+                val s = coach.settings.value
+                if (!s.enabled || s.provider !in coach.configuredProviders.value) coach.requestSettings()
+            }
             "com.google.android.gms.actions.CREATE_NOTE",
             Intent.ACTION_SEND -> {
                 val text = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -198,6 +206,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (::viewModel.isInitialized) {
             viewModel.refreshHealthAndSystemStatus()
+            // "Every app open" coach trigger (the coach applies its own min gap / quiet hours / daily cap)
+            CoachController.get(applicationContext).onAppOpen(viewModel.uiState.value.healthSnapshot)
         }
     }
 

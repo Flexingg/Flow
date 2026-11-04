@@ -130,6 +130,7 @@ fun TodayNextScreen(
     onOpenFocusSheet: () -> Unit = {},
     onOpenMorningRitual: () -> Unit = {},
     onOpenEveningRitual: () -> Unit = {},
+    coachCard: (@Composable () -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
@@ -151,6 +152,14 @@ fun TodayNextScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(FluidSpacing.sm))
+        }
+
+        // AI Coach persona card (bring-your-own-key)
+        if (coachCard != null) {
+            item(key = "ai_coach_card") {
+                coachCard()
+                Spacer(modifier = Modifier.height(FluidSpacing.md))
+            }
         }
 
         // Living Flow Glass Segmented Mode Switcher

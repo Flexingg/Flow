@@ -50,6 +50,9 @@
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
+    <!-- Background + historical reads (AI Coach runs while the app is closed) -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <!-- Package visibility for Health Connect, Shizuku, Speech Recognition, and Installed Launcher Apps -->
     <queries>
@@ -92,6 +95,7 @@
                 <action android:name="com.flow.todo.ACTION_VOICE_CAPTURE" />
                 <action android:name="com.flow.todo.ACTION_OPEN_GOALS" />
                 <action android:name="com.flow.todo.ACTION_OPEN_TODAY" />
+                <action android:name="com.flow.todo.ACTION_OPEN_COACH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
@@ -146,6 +150,21 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/flow_glass_widget_info" />
+        </receiver>
+
+        <!-- AI Coach persona card (bring-your-own-key LLM) -->
+        <receiver
+            android:name=".widget.FlowCoachWidgetProvider"
+            android:exported="true"
+            android:label="@string/coach_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
+                <action android:name="android.intent.action.WALLPAPER_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flow_coach_widget_info" />
         </receiver>
 
         <!-- Android Quick Settings Tile for Live Momentum & 1-Tap Quick Capture -->

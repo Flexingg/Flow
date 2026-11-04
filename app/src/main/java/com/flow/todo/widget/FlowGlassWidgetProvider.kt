@@ -52,7 +52,7 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
         EXPANDED_DASHBOARD
     }
 
-    private data class SystemGlassPalette(
+    internal data class SystemGlassPalette(
         val systemAccent: Int,
         val glassBgTop: Int,
         val glassBgBottom: Int,
@@ -221,7 +221,7 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
          * or Android 12+ Material You dynamic system_accent1_*, with fallback to the active momentum color)
          * and constructs a frosted ColorOS 17 liquid-glass palette infused with the system color.
          */
-        private fun resolveSystemGlassPalette(
+        internal fun resolveSystemGlassPalette(
             context: Context,
             fallbackMomentumColor: Int
         ): SystemGlassPalette {
@@ -455,7 +455,7 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
             return blendColors(c1, c2, frac)
         }
 
-        private fun blendColors(c1: Int, c2: Int, ratio: Float): Int {
+        internal fun blendColors(c1: Int, c2: Int, ratio: Float): Int {
             val rRatio = ratio.coerceIn(0f, 1f)
             val inv = 1f - rRatio
             val a = (Color.alpha(c1) * inv + Color.alpha(c2) * rRatio).roundToInt().coerceIn(0, 255)
@@ -465,7 +465,7 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
             return Color.argb(a, r, g, b)
         }
 
-        private fun withAlpha(color: Int, alpha: Int): Int {
+        internal fun withAlpha(color: Int, alpha: Int): Int {
             return Color.argb(
                 alpha.coerceIn(0, 255),
                 Color.red(color),
@@ -1346,7 +1346,7 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
             canvas.drawText(displayTaskLine, textStartX, checkCy + 4f * s, taskTextPaint)
         }
 
-        private fun ellipsizeText(text: String, paint: Paint, maxWidth: Float): String {
+        internal fun ellipsizeText(text: String, paint: Paint, maxWidth: Float): String {
             if (paint.measureText(text) <= maxWidth) return text
             val ellipsis = "…"
             var end = text.length
