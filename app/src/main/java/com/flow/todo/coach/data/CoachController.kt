@@ -8,6 +8,7 @@ import com.flow.todo.coach.CoachSettings
 import com.flow.todo.coach.CoachTrigger
 import com.flow.todo.coach.LlmProvider
 import com.flow.todo.coach.work.CoachScheduler
+import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.local.FlowDatabase
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.widget.FlowCoachWidgetProvider
@@ -92,7 +93,14 @@ class CoachController private constructor(private val appContext: Context) {
 
     suspend fun generateNow(health: HealthDailySnapshot?) = execute(CoachTrigger.MANUAL, health)
 
-    suspend fun generateInBackground(trigger: CoachTrigger) = execute(trigger, null)
+    suspend fun generateInBackground(trigger: CoachTrigger): CoachEngine.Outcome {
+        // With the background-read permission granted we get live numbers; otherwise the engine uses its cache.
+        val live = runCatching {
+            val hc = HealthConnectManager(appContext)
+            if (hc.hasBackgroundReadPermission()) hc.refreshDailySnapshot() else null
+        }.getOrNull()
+        return execute(trigger, live)
+    }
 
     private fun fireForeground(trigger: CoachTrigger, health: HealthDailySnapshot?) {
         val s = settings.value

@@ -58,8 +58,19 @@ class HealthConnectManager(private val context: Context) {
         HealthPermission.getReadPermission(BloodGlucoseRecord::class),
         HealthPermission.getReadPermission(OxygenSaturationRecord::class),
         HealthPermission.getReadPermission(BodyTemperatureRecord::class),
-        HealthPermission.getReadPermission(RespiratoryRateRecord::class)
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        PERMISSION_READ_IN_BACKGROUND,
+        PERMISSION_READ_HISTORY
     )
+
+    /** True when Health Connect lets this app read while it is not in the foreground (needed by the AI Coach worker). */
+    suspend fun hasBackgroundReadPermission(): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE &&
+                PERMISSION_READ_IN_BACKGROUND in HealthConnectClient.getOrCreate(context)
+                    .permissionController.getGrantedPermissions()
+        }.getOrDefault(false)
+    }
 
     private val _snapshot = MutableStateFlow(HealthDailySnapshot(totalPermissionCount = allReadPermissions.size))
     val snapshot: StateFlow<HealthDailySnapshot> = _snapshot.asStateFlow()
@@ -298,5 +309,10 @@ class HealthConnectManager(private val context: Context) {
         )
         _snapshot.value = updatedSnapshot
         updatedSnapshot
+    }
+
+    companion object {
+        const val PERMISSION_READ_IN_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+        const val PERMISSION_READ_HISTORY = "android.permission.health.READ_HEALTH_DATA_HISTORY"
     }
 }

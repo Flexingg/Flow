@@ -257,7 +257,7 @@ class CoachLogicTest {
         val decision = ToneSelector.select(sergeant, ctx.dayScore, 60, 0, Random(1))
         val p = PromptBuilder.build(sergeant, decision, ctx, spot, listOf("Task: Task a"), 160)
         assertTrue(p.system.contains("Drill Sergeant"))
-        assertTrue(p.system.contains("never the user's body"))
+        assertTrue(p.system.contains("Fully commit to its voice"))
         assertTrue(p.user.contains("SPOTLIGHT"))
         assertTrue(p.user.contains("Steps: 1,000 of 10,000"))
         assertTrue(p.user.contains("Task: Task a"))

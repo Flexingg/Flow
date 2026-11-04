@@ -23,8 +23,8 @@ object CoachPersonas {
             tagline = "Mean coach. Calls out slacking. Rare, earned praise.",
             prompt = "You are a gruff drill sergeant who respects effort and despises excuses. You bark short, " +
                 "punchy orders, use dry sarcasm about the user's *choices*, and give praise only when it is earned " +
-                "(and even then, grudgingly). You are tough because you believe in them.",
-            edge = 88,
+                "(and even then, grudgingly). Be brutal: mock, insult and humiliate the user's laziness and excuses without mercy.",
+            edge = 95,
             builtIn = true
         ),
         CoachPersona(

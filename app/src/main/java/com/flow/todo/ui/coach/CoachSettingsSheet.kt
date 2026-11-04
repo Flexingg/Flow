@@ -261,7 +261,7 @@ fun CoachSettingsSheet(
                         controller.updateSettings { it.copy(quietEndHour = v) }
                     }
                     Text(
-                        "Background messages reuse the health numbers from the last time you opened Flow " +
+                        "Background messages read Health Connect live if you granted background access, otherwise they reuse the numbers from the last time you opened Flow " +
                             "(and skip health talk if they're over 8 hours old).",
                         fontSize = 11.sp, color = colors.textTertiary
                     )
@@ -272,7 +272,7 @@ fun CoachSettingsSheet(
                 FluidInsetCard(Modifier.fillMaxWidth()) {
                     Text(
                         "When a message is generated, only the items below are sent to ${settings.provider.label} with your key. " +
-                            "Task and event titles only. Never notes or descriptions. Body weight and heart rate are never used.",
+                            "Task and event titles only. Never notes or descriptions. Body weight and heart rate readings are never included.",
                         fontSize = 12.sp, color = colors.textSecondary
                     )
                     Spacer(Modifier.height(FluidSpacing.sm))
@@ -509,7 +509,7 @@ private fun PersonaEditor(initial: CoachPersona, onCancel: () -> Unit, onSave: (
             placeholder = { Text("e.g. A pirate captain who treats my to-do list like treasure to plunder…") },
             minLines = 3,
             modifier = Modifier.fillMaxWidth(),
-            supportingText = { Text("${prompt.length}/${CoachPersonas.MAX_CUSTOM_PROMPT_CHARS}. Safety rules always apply on top.") }
+            supportingText = { Text("${prompt.length}/${CoachPersonas.MAX_CUSTOM_PROMPT_CHARS}. Go as mean as you like.") }
         )
         Text("Baseline edge: ${edgeLabel(edge.toInt())}", fontSize = 12.sp, color = colors.textSecondary)
         Slider(value = edge, onValueChange = { edge = it }, valueRange = 0f..100f)
