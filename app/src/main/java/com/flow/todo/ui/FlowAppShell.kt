@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +58,9 @@ import androidx.core.content.ContextCompat
 import com.flow.todo.domain.model.DailyRitualType
 import com.flow.todo.ui.screens.CalendarScreen
 import com.flow.todo.ui.screens.DailyRitualSheet
+import com.flow.todo.coach.data.CoachController
+import com.flow.todo.ui.coach.CoachCard
+import com.flow.todo.ui.coach.CoachSettingsSheet
 import com.flow.todo.ui.screens.FluidSettingsSheet
 import com.flow.todo.ui.screens.FocusModeSheet
 import com.flow.todo.ui.screens.GoalCreatorSheet
@@ -99,6 +103,21 @@ fun FlowAppShell(
     )
 
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // AI Coach (bring-your-own-key persona card + widget)
+    val coach = remember { CoachController.get(context) }
+    var isCoachSettingsOpen by rememberSaveable { mutableStateOf(false) }
+    val coachSettingsRequested by coach.settingsRequested.collectAsStateWithLifecycle()
+    LaunchedEffect(coachSettingsRequested) {
+        if (coachSettingsRequested) {
+            isCoachSettingsOpen = true
+            coach.consumeSettingsRequest()
+        }
+    }
+    // "Every screen open" trigger: fires when the user switches tabs (rate-limited by the coach settings)
+    LaunchedEffect(uiState.selectedTab, isSplashFinished) {
+        if (isSplashFinished) coach.onScreenOpen(uiState.healthSnapshot)
+    }
 
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -364,6 +383,13 @@ fun FlowAppShell(
                         onOpenFocusSheet = { viewModel.setFocusSheetOpen(true) },
                         onOpenMorningRitual = viewModel::openMorningRitual,
                         onOpenEveningRitual = viewModel::openEveningRitual,
+                        coachCard = {
+                            CoachCard(
+                                controller = coach,
+                                healthSnapshot = uiState.healthSnapshot,
+                                onOpenSettings = { isCoachSettingsOpen = true }
+                            )
+                        },
                         contentPadding = screenContentPadding,
                         listState = todayListState
                     )
@@ -551,6 +577,14 @@ fun FlowAppShell(
                         appUsageMetric = appUsageMetric
                     )
                 }
+            )
+        }
+
+        if (isCoachSettingsOpen) {
+            CoachSettingsSheet(
+                controller = coach,
+                healthSnapshot = uiState.healthSnapshot,
+                onDismiss = { isCoachSettingsOpen = false }
             )
         }
 

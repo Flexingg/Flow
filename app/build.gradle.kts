@@ -132,4 +132,9 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.play.services.auth)
+
+    // AI Coach: background scheduling (interval / random triggers)
+    implementation(libs.androidx.work.runtime.ktx)
+
+    testImplementation(libs.junit)
 }
