@@ -39,11 +39,13 @@ import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.SubtaskItem
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import com.flow.todo.widget.FlowCalendarWidgetProvider
 import com.flow.todo.widget.FlowGlassWidgetProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -179,6 +181,9 @@ class FlowViewModel(
     )
 
     private val _localFlags = MutableStateFlow(LocalUiFlags())
+
+    /** Shared across activity recreations because the ViewModel survives them. */
+    private var lastSystemColorApplyMillis = 0L
     private val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
 
     private val healthSnapshotFlow: Flow<HealthDailySnapshot> =
@@ -495,13 +500,20 @@ class FlowViewModel(
             refreshHealthAndSystemStatus()
         }
 
+        // System color sync is debounced and rate-limited: every change re-themes the whole OS (and
+        // recreates this activity), so applying on each progress tick makes adding goals laggy.
+        // Waits for progress to settle, never applies while the goal creator is open, and applies at
+        // most once per SYSTEM_COLOR_MIN_INTERVAL_MS (always ending on the latest value).
         viewModelScope.launch {
             uiState
-                .map { it.accessibility.syncSystemColorsWithShizuku to it.dailyProgress }
+                .map { Triple(it.accessibility.syncSystemColorsWithShizuku, it.dailyProgress, it.isGoalCreatorOpen) }
                 .distinctUntilChanged()
-                .collect { (syncEnabled, progress) ->
-                    if (syncEnabled) {
-                        shizukuManager?.applyMomentumColorForProgress(progress)
+                .collectLatest { (syncEnabled, progress, goalCreatorOpen) ->
+                    if (!syncEnabled || goalCreatorOpen) return@collectLatest
+                    val sinceLast = System.currentTimeMillis() - lastSystemColorApplyMillis
+                    delay(maxOf(SYSTEM_COLOR_SETTLE_MS, SYSTEM_COLOR_MIN_INTERVAL_MS - sinceLast))
+                    if (shizukuManager?.applyMomentumColorForProgress(progress) == true) {
+                        lastSystemColorApplyMillis = System.currentTimeMillis()
                     }
                 }
         }
@@ -546,6 +558,17 @@ class FlowViewModel(
                     )
                     repository.upsertDailyHistory(record)
                     firestoreSyncManager?.pushDailyHistory(record)
+                }
+        }
+
+        // Keep the Calendar agenda widget in sync with events and tasks (debounced: bulk imports fire many updates)
+        viewModelScope.launch {
+            uiState
+                .map { it.allCalendarEvents to it.allTasks }
+                .distinctUntilChanged()
+                .collectLatest {
+                    delay(600)
+                    appContext?.let { ctx -> FlowCalendarWidgetProvider.requestUpdate(ctx) }
                 }
         }
 
@@ -1635,6 +1658,11 @@ class FlowViewModel(
     }
 
     companion object {
+        /** Quiet period after the last progress change before re-theming the system. */
+        private const val SYSTEM_COLOR_SETTLE_MS = 3_000L
+        /** Minimum time between two automatic system color changes. */
+        private const val SYSTEM_COLOR_MIN_INTERVAL_MS = 20_000L
+
         internal val globalDisabledGoalIds = MutableStateFlow<Set<String>>(emptySet())
 
         fun provideFactory(

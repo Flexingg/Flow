@@ -32,6 +32,7 @@ import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.ui.FlowAppShell
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidTheme
+import com.flow.todo.widget.FlowCalendarWidgetProvider
 import com.flow.todo.widget.FlowCoachWidgetProvider
 import com.flow.todo.widget.FlowGlassWidgetProvider
 
@@ -86,7 +87,10 @@ class MainActivity : ComponentActivity() {
 
         // Widget / tile / shortcut / share launches go straight to the action: no splash animation.
         val skipSplash = savedInstanceState != null || intent?.action in FAST_LAUNCH_ACTIONS
-        handleIncomingIntent(intent)
+        // Only act on the launch intent on a fresh start. The activity is recreated on every system
+        // color (theme overlay) change; re-handling the original widget intent then would yank the
+        // user back to Today / reopen Quick Capture.
+        if (savedInstanceState == null) handleIncomingIntent(intent)
 
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -200,6 +204,9 @@ class MainActivity : ComponentActivity() {
             FlowGlassWidgetProvider.ACTION_OPEN_GOALS -> {
                 viewModel.selectTab(FlowTab.GOALS)
             }
+            FlowCalendarWidgetProvider.ACTION_OPEN_CALENDAR -> {
+                viewModel.selectTab(FlowTab.CALENDAR)
+            }
             FlowGlassWidgetProvider.ACTION_OPEN_TODAY -> {
                 viewModel.selectTab(FlowTab.TODAY_NEXT)
             }
@@ -251,7 +258,8 @@ class MainActivity : ComponentActivity() {
         val FAST_LAUNCH_ACTIONS = CAPTURE_ACTIONS + setOf(
             FlowGlassWidgetProvider.ACTION_OPEN_TODAY,
             FlowGlassWidgetProvider.ACTION_OPEN_GOALS,
-            FlowCoachWidgetProvider.ACTION_OPEN_COACH
+            FlowCoachWidgetProvider.ACTION_OPEN_COACH,
+            FlowCalendarWidgetProvider.ACTION_OPEN_CALENDAR
         )
     }
 }

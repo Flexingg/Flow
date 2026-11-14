@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calendar agenda widget: a rendered glass bitmap with transparent tap targets laid over it.
+     Header = 56dp, each agenda row = 36dp (FlowCalendarWidgetProvider draws to the same grid). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cal_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="2dp">
+
+    <ImageView
+        android:id="@+id/cal_canvas_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/calendar_widget_label" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@android:color/transparent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_btn_open_header"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_btn_quick_capture"
+                android:layout_width="64dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/cd_quick_add_task"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/cal_row0"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row0_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row0_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/cal_row1"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row1_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row1_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/cal_row2"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row2_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row2_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/cal_row3"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row3_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row3_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/cal_row4"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row4_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row4_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/cal_row5"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent">
+
+            <FrameLayout
+                android:id="@+id/cal_row5_open"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+
+            <FrameLayout
+                android:id="@+id/cal_row5_check"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/calendar_widget_check"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/cal_btn_open_footer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent" />
+    </LinearLayout>
+</FrameLayout>
