@@ -53,7 +53,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.flow.todo"
+        applicationId = "com.flow.randall"
         minSdk = 26
         targetSdk = 35
         versionCode = appVersionCode

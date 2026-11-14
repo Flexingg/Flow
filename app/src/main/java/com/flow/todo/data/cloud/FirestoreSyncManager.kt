@@ -212,7 +212,7 @@ class FirestoreSyncManager(
 
         if (account == null) {
             val errorMsg = when (apiException?.statusCode) {
-10 -> "Google Sign-In configuration error (Code 10: DEVELOPER_ERROR). This APK's SHA-1 signing fingerprint is not registered for 'com.flow.todo' in the Firebase project, or the build has no google-services.json."
+10 -> "Google Sign-In configuration error (Code 10: DEVELOPER_ERROR). This APK's SHA-1 signing fingerprint is not registered for 'com.flow.randall' in the Firebase project, or the build has no google-services.json."
                 12500 -> "Google Sign-In failed (Code 12500: SIGN_IN_FAILED). Please ensure Google Sign-In is enabled in your Firebase Console Authentication tab and the Web Client ID matches."
                 12501 -> "Google Sign-In was cancelled."
                 12502 -> "Google Sign-In is currently in progress."

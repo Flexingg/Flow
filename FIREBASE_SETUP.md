@@ -28,7 +28,7 @@ keytool -list -v -keystore flow-release.jks -alias flow
 ## 2. Create the Firebase project
 
 1. <https://console.firebase.google.com> → **Add project** (Google Analytics optional).
-2. **Add app → Android**. Package name: `com.flow.todo`. Paste the **SHA-1** from step 1, and
+2. **Add app → Android**. Package name: `com.flow.randall`. Paste the **SHA-1** from step 1, and
    afterwards add the **SHA-256** too under *Project settings → Your apps → Add fingerprint*.
 3. **Build → Authentication → Get started → Sign-in method**: enable **Google**
    (and **Email/Password** if you want the email option).
