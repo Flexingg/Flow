@@ -86,7 +86,10 @@ class MainActivity : ComponentActivity() {
 
         // Widget / tile / shortcut / share launches go straight to the action: no splash animation.
         val skipSplash = savedInstanceState != null || intent?.action in FAST_LAUNCH_ACTIONS
-        handleIncomingIntent(intent)
+        // Only act on the launch intent on a fresh start. The activity is recreated on every system
+        // color (theme overlay) change; re-handling the original widget intent then would yank the
+        // user back to Today / reopen Quick Capture.
+        if (savedInstanceState == null) handleIncomingIntent(intent)
 
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
