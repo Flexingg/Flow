@@ -90,13 +90,17 @@ fun FlowAppShell(
     onRequestHealthPermissions: () -> Unit = {},
     onRequestUsagePermission: () -> Unit = {},
     onSignInWithGoogle: () -> Unit = {},
+    /** True when launched from the widget / tile / shortcut / share sheet: skip the splash for instant capture. */
+    skipSplash: Boolean = false,
+    /** Called when the Quick Capture sheet closes; [saved] is true if a task was added. */
+    onQuickCaptureClosed: (saved: Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isReducedMotion = FluidTheme.isReducedMotion
     val colors = FluidTheme.colors
 
-    var isSplashFinished by rememberSaveable { mutableStateOf(false) }
+    var isSplashFinished by rememberSaveable { mutableStateOf(skipSplash) }
     val splashTransition = rememberSplashTransitionState(
         isAlreadyFinished = isSplashFinished,
         onSplashFinished = { isSplashFinished = true }
@@ -528,12 +532,17 @@ fun FlowAppShell(
 
         // Living Flow Quick-Capture Sheet (GTD Tasks + NLP Smart Parse + Voice + Subtasks)
         if (uiState.isQuickCaptureOpen) {
+            var captureSaved by remember { mutableStateOf(false) }
             QuickCaptureSheet(
                 projects = uiState.projects,
                 initialTitle = uiState.quickCaptureInitialTitle,
                 autoStartVoice = uiState.quickCaptureAutoVoice,
-                onDismiss = { viewModel.setQuickCaptureOpen(false) },
+                onDismiss = {
+                    viewModel.setQuickCaptureOpen(false)
+                    onQuickCaptureClosed(captureSaved)
+                },
                 onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal, subtasks, contextTag ->
+                    captureSaved = true
                     viewModel.addTask(
                         title = title,
                         notes = notes,
@@ -548,6 +557,7 @@ fun FlowAppShell(
                     )
                 },
                 onBatchAddTasks = { drafts ->
+                    captureSaved = true
                     viewModel.addTasksBatch(drafts)
                 }
             )

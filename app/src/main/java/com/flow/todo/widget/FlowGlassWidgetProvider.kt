@@ -366,7 +366,6 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
             val fallbackMomentumColor = interpolateSpectrumColor(momentumProgress, stopHexes)
             val systemPalette = resolveSystemGlassPalette(context, fallbackMomentumColor)
 
-            val openGoalsPending = buildActivityPendingIntent(context, ACTION_OPEN_GOALS, 201)
             val quickCapturePending = buildActivityPendingIntent(context, ACTION_QUICK_CAPTURE, 203)
             val openTodayPending = buildActivityPendingIntent(context, ACTION_OPEN_TODAY, 204)
 
@@ -412,7 +411,8 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
 
                 val views = RemoteViews(context.packageName, R.layout.widget_flow_glass)
                 views.setImageViewBitmap(R.id.widget_canvas_image, bitmap)
-                views.setOnClickPendingIntent(R.id.widget_btn_open_goals, openGoalsPending)
+                // Main body tap opens the Today task list (quick task triage), not the Goals page
+                views.setOnClickPendingIntent(R.id.widget_btn_open_goals, openTodayPending)
                 views.setOnClickPendingIntent(R.id.widget_btn_quick_capture, quickCapturePending)
                 views.setOnClickPendingIntent(R.id.widget_btn_complete_task, completeTaskPending)
                 views.setOnClickPendingIntent(R.id.widget_btn_open_today, openTodayPending)

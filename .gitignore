@@ -32,3 +32,8 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Release signing keys: never commit
+*.jks
+*.keystore
+keystore.properties

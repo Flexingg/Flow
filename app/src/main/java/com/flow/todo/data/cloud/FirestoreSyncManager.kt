@@ -55,6 +55,18 @@ class FirestoreSyncManager(
     private val syncScope = CoroutineScope(syncJob + Dispatchers.IO)
     private val listenerRegistrations = mutableListOf<ListenerRegistration>()
 
+    /**
+     * The app-wide Firebase project baked into the APK by the Google Services Gradle plugin
+     * (from app/google-services.json). When present, users never configure Firebase themselves.
+     */
+    private val bundledOptions: FirebaseOptions? = runCatching { FirebaseOptions.fromResource(context) }.getOrNull()
+
+    /** OAuth "Web client" ID generated from google-services.json (needed to get an ID token for Firebase Auth). */
+    private fun bundledWebClientId(): String {
+        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        return if (resId != 0) context.getString(resId) else ""
+    }
+
     private val _state: MutableStateFlow<CloudSyncState>
     val state: StateFlow<CloudSyncState>
 
@@ -64,7 +76,8 @@ class FirestoreSyncManager(
         val isReady = checkFirebaseReady(initialConfig)
         val currentAuthUser = if (isReady) runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull() else null
 
-        val resolvedUid = initialUser.uid ?: currentAuthUser?.uid
+        // Prefer the live Firebase Auth UID (matches the per-user Firestore security rules).
+        val resolvedUid = currentAuthUser?.uid ?: initialUser.uid
         val resolvedEmail = initialUser.email ?: currentAuthUser?.email
         val resolvedDisplayName = initialUser.displayName ?: currentAuthUser?.displayName
         val isGoogle = initialUser.isGoogle || (currentAuthUser?.providerData?.any { it.providerId == "google.com" } == true)
@@ -90,7 +103,8 @@ class FirestoreSyncManager(
                 isGoogleAccount = isGoogle,
                 customConfig = initialConfig,
                 isFirebaseReady = isReady,
-                statusMessage = initialMessage
+                statusMessage = initialMessage,
+                usesBundledFirebase = bundledOptions != null
             )
         )
         state = _state.asStateFlow()
@@ -168,7 +182,7 @@ class FirestoreSyncManager(
         val gsoBuilder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
-        val webClientId = _state.value.customConfig.webClientId.trim()
+        val webClientId = _state.value.customConfig.webClientId.trim().ifEmpty { bundledWebClientId() }
         if (webClientId.isNotEmpty()) {
             runCatching { gsoBuilder.requestIdToken(webClientId) }
         }
@@ -198,7 +212,7 @@ class FirestoreSyncManager(
 
         if (account == null) {
             val errorMsg = when (apiException?.statusCode) {
-                10 -> "Google Sign-In requires your own Firebase project (Code 10: DEVELOPER_ERROR). Android Google Play Services requires registering 'com.flow.todo' and its SHA-1 signing fingerprint in Firebase Console. You can configure your Firebase Project ID and Web Client ID below."
+10 -> "Google Sign-In configuration error (Code 10: DEVELOPER_ERROR). This APK's SHA-1 signing fingerprint is not registered for 'com.flow.todo' in the Firebase project, or the build has no google-services.json."
                 12500 -> "Google Sign-In failed (Code 12500: SIGN_IN_FAILED). Please ensure Google Sign-In is enabled in your Firebase Console Authentication tab and the Web Client ID matches."
                 12501 -> "Google Sign-In was cancelled."
                 12502 -> "Google Sign-In is currently in progress."
@@ -218,28 +232,34 @@ class FirestoreSyncManager(
         val accountId = account.id ?: account.email?.hashCode()?.toString() ?: UUID.randomUUID().toString()
         val email = account.email
         val displayName = account.displayName
-        val syncKey = "google_$accountId"
-
-        saveUserSession(
-            uid = syncKey,
-            email = email,
-            displayName = displayName,
-            isGoogle = true
-        )
 
         val firebaseReady = ensureFirebaseInitialized()
         if (firebaseReady) {
             val idToken = account.idToken
-            if (!idToken.isNullOrBlank()) {
+            val authResult = if (!idToken.isNullOrBlank()) {
                 runCatching {
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
                     FirebaseAuth.getInstance().signInWithCredential(credential).await()
                 }
-            } else if (FirebaseAuth.getInstance().currentUser == null) {
-                runCatching {
-                    FirebaseAuth.getInstance().signInAnonymously().await()
-                }
+            } else {
+                Result.failure(IllegalStateException("No ID token (missing Web client ID in google-services.json)"))
             }
+
+            // Data lives under users/{Firebase Auth UID} so Firestore rules can lock each user to their own data.
+            val firebaseUid = FirebaseAuth.getInstance().currentUser?.uid
+            if (authResult.isFailure || firebaseUid == null) {
+                _state.update {
+                    it.copy(
+                        status = CloudSyncStatus.ERROR,
+                        statusMessage = "Google account OK, but Firebase sign-in failed: " +
+                            (authResult.exceptionOrNull()?.message ?: "unknown error") +
+                            ". Check that the Google provider is enabled in Firebase Authentication."
+                    )
+                }
+                return
+            }
+            val syncKey = firebaseUid
+            saveUserSession(uid = syncKey, email = email, displayName = displayName, isGoogle = true)
 
             _state.update {
                 it.copy(
@@ -256,6 +276,8 @@ class FirestoreSyncManager(
             startRealtimeListeners(syncKey)
             syncAllNow()
         } else {
+            val syncKey = "google_$accountId"
+            saveUserSession(uid = syncKey, email = email, displayName = displayName, isGoogle = true)
             _state.update {
                 it.copy(
                     status = CloudSyncStatus.NOT_CONFIGURED,

@@ -62,10 +62,29 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Stable release signing (required for Google Sign-In: Firebase checks the APK's SHA-1, and a
+    // stable key also lets new APKs install over old ones). Provided by CI from GitHub Secrets, or
+    // locally via environment variables. Falls back to the debug key when not configured.
+    val releaseKeystore = System.getenv("FLOW_KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("FLOW_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FLOW_KEY_ALIAS")
+                keyPassword = System.getenv("FLOW_KEY_PASSWORD") ?: System.getenv("FLOW_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -82,6 +101,12 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+// App-wide Firebase project: applied only when app/google-services.json is present, so the
+// project still builds (with cloud sync disabled) before that file is added.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 tasks.register("printVersion") {

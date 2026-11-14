@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Widget / tile / shortcut / share launches go straight to the action: no splash animation.
+        val skipSplash = savedInstanceState != null || intent?.action in FAST_LAUNCH_ACTIONS
         handleIncomingIntent(intent)
 
         setContent {
@@ -156,7 +159,9 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     onRequestHealthPermissions = requestHealthPermissions,
                     onRequestUsagePermission = requestUsagePermission,
-                    onSignInWithGoogle = requestGoogleSignIn
+                    onSignInWithGoogle = requestGoogleSignIn,
+                    skipSplash = skipSplash,
+                    onQuickCaptureClosed = ::onQuickCaptureClosed
                 )
             }
         }
@@ -168,8 +173,23 @@ class MainActivity : ComponentActivity() {
         handleIncomingIntent(intent)
     }
 
+    /**
+     * When Quick Capture was opened from outside the app (widget "+", Quick Settings tile, launcher
+     * shortcut, share sheet, Assistant), closing it sends the user straight back to where they were
+     * instead of leaving them inside Flow. The task stays warm in the background for the next capture.
+     */
+    private var captureLaunchedExternally = false
+
+    private fun onQuickCaptureClosed(saved: Boolean) {
+        if (!captureLaunchedExternally) return
+        captureLaunchedExternally = false
+        if (saved) Toast.makeText(this, "Task captured", Toast.LENGTH_SHORT).show()
+        moveTaskToBack(true)
+    }
+
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null || !::viewModel.isInitialized) return
+        captureLaunchedExternally = intent.action in CAPTURE_ACTIONS
         when (intent.action) {
             FlowGlassWidgetProvider.ACTION_QUICK_CAPTURE -> {
                 viewModel.openQuickCaptureWithDraft(initialTitle = "", autoStartVoice = false)
@@ -219,5 +239,19 @@ class MainActivity : ComponentActivity() {
         if (::firestoreSyncManager.isInitialized) {
             firestoreSyncManager.destroy()
         }
+    }
+
+    private companion object {
+        val CAPTURE_ACTIONS = setOf(
+            FlowGlassWidgetProvider.ACTION_QUICK_CAPTURE,
+            FlowGlassWidgetProvider.ACTION_VOICE_CAPTURE,
+            "com.google.android.gms.actions.CREATE_NOTE",
+            Intent.ACTION_SEND
+        )
+        val FAST_LAUNCH_ACTIONS = CAPTURE_ACTIONS + setOf(
+            FlowGlassWidgetProvider.ACTION_OPEN_TODAY,
+            FlowGlassWidgetProvider.ACTION_OPEN_GOALS,
+            FlowCoachWidgetProvider.ACTION_OPEN_COACH
+        )
     }
 }
