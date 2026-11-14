@@ -39,6 +39,7 @@ import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.SubtaskItem
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.domain.model.UpcomingDayGroup
+import com.flow.todo.widget.FlowCalendarWidgetProvider
 import com.flow.todo.widget.FlowGlassWidgetProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -557,6 +558,17 @@ class FlowViewModel(
                     )
                     repository.upsertDailyHistory(record)
                     firestoreSyncManager?.pushDailyHistory(record)
+                }
+        }
+
+        // Keep the Calendar agenda widget in sync with events and tasks (debounced: bulk imports fire many updates)
+        viewModelScope.launch {
+            uiState
+                .map { it.allCalendarEvents to it.allTasks }
+                .distinctUntilChanged()
+                .collectLatest {
+                    delay(600)
+                    appContext?.let { ctx -> FlowCalendarWidgetProvider.requestUpdate(ctx) }
                 }
         }
 

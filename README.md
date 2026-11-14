@@ -29,3 +29,7 @@ A persona-driven coach card on **Today** and a dedicated **AI Coach** home-scree
 - **You control what is sent**: toggle today's tasks, backlog, Health Connect + goals, calendar, streak/momentum. Titles only; "Preview prompt" shows exactly what would be sent.
 
 Code lives in `com.flow.todo.coach` (pure, unit-tested logic at the package root; Android integration in `coach/data` and `coach/work`; UI in `ui/coach`; widget in `widget/FlowCoachWidgetProvider`).
+
+## Calendar widget
+
+**Flow Calendar** home-screen widget: today's agenda on a system-color glass card. Calendar events (with their calendar color, "now" highlight) and due/overdue tasks, filled out with tomorrow's events when today is light. Tap a row's circle to check it off from the home screen; tap anywhere else to open the Calendar tab; "+" opens Quick Capture. Recurring tasks open the app (so the next occurrence is scheduled). Agenda logic: `widget/agenda/CalendarAgenda.kt` (unit-tested).

@@ -96,6 +96,7 @@
                 <action android:name="com.flow.todo.ACTION_OPEN_GOALS" />
                 <action android:name="com.flow.todo.ACTION_OPEN_TODAY" />
                 <action android:name="com.flow.todo.ACTION_OPEN_COACH" />
+                <action android:name="com.flow.todo.ACTION_OPEN_CALENDAR" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
@@ -150,6 +151,22 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/flow_glass_widget_info" />
+        </receiver>
+
+        <!-- Calendar agenda widget: today's events + due tasks with home-screen check-off -->
+        <receiver
+            android:name=".widget.FlowCalendarWidgetProvider"
+            android:exported="true"
+            android:label="@string/calendar_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flow_calendar_widget_info" />
         </receiver>
 
         <!-- AI Coach persona card (bring-your-own-key LLM) -->
