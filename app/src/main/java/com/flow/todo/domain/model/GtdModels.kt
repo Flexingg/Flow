@@ -705,7 +705,9 @@ data class CloudSyncState(
     val lastSyncedMillis: Long = 0L,
     val statusMessage: String = "Sign in with Google to sync tasks & goals across devices",
     val customConfig: FirebaseCloudConfig = FirebaseCloudConfig(),
-    val isFirebaseReady: Boolean = false
+    val isFirebaseReady: Boolean = false,
+    /** True when the APK ships with the app-wide Firebase project (google-services.json). */
+    val usesBundledFirebase: Boolean = false
 ) {
     val isSignedIn: Boolean
         get() = !userUid.isNullOrBlank()

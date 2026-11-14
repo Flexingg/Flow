@@ -1233,6 +1233,8 @@ fun FluidSettingsSheet(
                         }
                     }
 
+                    // Per-user Firebase project setup is only shown for builds without the bundled app-wide Firebase project.
+                    if (!cloudSyncState.usesBundledFirebase) {
                     HorizontalDivider(
                         thickness = 1.dp,
                         color = FluidTheme.colors.divider,
@@ -1442,6 +1444,7 @@ fun FluidSettingsSheet(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
+                    }
                     }
                 }
 

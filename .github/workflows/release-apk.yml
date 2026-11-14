@@ -55,7 +55,28 @@ jobs:
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
           echo "Determined Version: v${VERSION_NAME} (code ${VERSION_CODE})"
 
+      - name: Restore Firebase config & release keystore from secrets
+        env:
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_B64" ] && [ ! -f app/google-services.json ]; then
+            echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > app/google-services.json
+            echo "google-services.json restored from secret"
+          fi
+          if [ -n "$RELEASE_KEYSTORE_B64" ]; then
+            echo "$RELEASE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/flow-release.jks"
+            echo "FLOW_KEYSTORE_PATH=$RUNNER_TEMP/flow-release.jks" >> "$GITHUB_ENV"
+            echo "Release keystore restored from secret"
+          else
+            echo "::warning::RELEASE_KEYSTORE_B64 not set - APK is signed with a throwaway debug key (Google Sign-In will fail)"
+          fi
+
       - name: Build Release APK
+        env:
+          FLOW_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          FLOW_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          FLOW_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Prepare APK artifact
