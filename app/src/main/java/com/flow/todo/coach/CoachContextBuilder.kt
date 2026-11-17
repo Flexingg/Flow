@@ -1,6 +1,5 @@
 package com.flow.todo.coach
 
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthMetricType
 import java.time.Instant
 import java.time.ZoneId
@@ -14,7 +13,6 @@ import kotlin.math.min
 data class CoachTaskInput(
     val id: String,
     val title: String,
-    val bucket: GtdBucket,
     val dueEpochDay: Long?,
     val isFlagged: Boolean,
     val isCompleted: Boolean,
@@ -136,40 +134,39 @@ object CoachContextBuilder {
         }
 
         if (input.sources.backlogTasks) {
+            // Backlog = open tasks with no due date (plus flagged tasks due later).
             val dueIds = (overdue + dueToday).map { it.id }.toSet()
-            val backlog = open.filter {
-                it.id !in dueIds && (it.bucket == GtdBucket.NEXT_ACTION || it.bucket == GtdBucket.INBOX || it.isFlagged)
-            }
+            val undated = open.filter { it.dueEpochDay == null }
+            val backlog = open.filter { it.id !in dueIds && (it.dueEpochDay == null || it.isFlagged) }
             backlog
                 .sortedWith(compareByDescending<CoachTaskInput> { it.isFlagged }.thenBy { it.createdAtMillis })
                 .take(4)
                 .forEach { t ->
                     val ageDays = ((input.nowMillis - t.createdAtMillis) / DAY_MILLIS).coerceAtLeast(0)
-                    val where = if (t.bucket == GtdBucket.INBOX) "the Inbox" else "Next Actions"
                     candidates += CoachTopic(
                         key = "task:${t.id}",
                         type = TopicType.TASK_BACKLOG,
                         label = "Backlog: ${clean(t.title, 30)}",
-                        fact = "Backlog item \"${clean(t.title)}\" has sat in $where for $ageDays day${if (ageDays == 1L) "" else "s"}" +
+                        fact = "Task \"${clean(t.title)}\" has been on the list for $ageDays day${if (ageDays == 1L) "" else "s"}" +
+                            (if (t.dueEpochDay == null) " with no due date" else "") +
                             if (t.isFlagged) " (flagged)" else "",
                         status = TopicStatus.INFO,
                         urgency = min(0.5, 0.2 + ageDays * 0.01 + if (t.isFlagged) 0.1 else 0.0),
                         snapshot = 0.0
                     )
                 }
-            val inboxCount = open.count { it.bucket == GtdBucket.INBOX }
-            if (inboxCount >= 5) {
+            if (undated.size >= 8) {
                 candidates += CoachTopic(
-                    key = "general:inbox",
+                    key = "general:backlog",
                     type = TopicType.TASK_BACKLOG,
-                    label = "Inbox size",
-                    fact = "Inbox has $inboxCount unprocessed items",
+                    label = "Undated pile",
+                    fact = "${undated.size} open tasks have no due date",
                     status = TopicStatus.INFO,
-                    urgency = min(0.5, 0.2 + inboxCount / 60.0),
-                    snapshot = min(1.0, inboxCount / 50.0)
+                    urgency = min(0.5, 0.2 + undated.size / 60.0),
+                    snapshot = min(1.0, undated.size / 50.0)
                 )
             }
-            background += "Backlog: ${open.count { it.bucket == GtdBucket.NEXT_ACTION }} next actions, $inboxCount in inbox"
+            background += "Backlog: ${undated.size} open tasks with no due date"
         }
 
         // ---- Health ----

@@ -55,20 +55,15 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import com.flow.todo.domain.model.DailyRitualType
 import com.flow.todo.ui.screens.CalendarScreen
-import com.flow.todo.ui.screens.DailyRitualSheet
 import com.flow.todo.coach.data.CoachController
 import com.flow.todo.ui.coach.CoachCard
 import com.flow.todo.ui.coach.CoachSettingsSheet
 import com.flow.todo.ui.screens.FluidSettingsSheet
-import com.flow.todo.ui.screens.FocusModeSheet
 import com.flow.todo.ui.screens.GoalCreatorSheet
 import com.flow.todo.ui.screens.GoalsScreen
-import com.flow.todo.ui.screens.InboxScreen
-import com.flow.todo.ui.screens.ProjectsScreen
 import com.flow.todo.ui.screens.QuickCaptureSheet
-import com.flow.todo.ui.screens.TodayNextScreen
+import com.flow.todo.ui.screens.TasksScreen
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
@@ -157,17 +152,13 @@ fun FlowAppShell(
     }
 
     // Separate scroll states per tab so scroll positions are retained during tab navigation
-    val inboxListState = rememberLazyListState()
-    val todayListState = rememberLazyListState()
+    val tasksListState = rememberLazyListState()
     val calendarListState = rememberLazyListState()
-    val projectsListState = rememberLazyListState()
     val goalsListState = rememberLazyListState()
 
     val currentListState = when (uiState.selectedTab) {
-        FlowTab.INBOX -> inboxListState
-        FlowTab.TODAY_NEXT -> todayListState
+        FlowTab.TASKS -> tasksListState
         FlowTab.CALENDAR -> calendarListState
-        FlowTab.PROJECTS -> projectsListState
         FlowTab.GOALS -> goalsListState
     }
 
@@ -179,22 +170,14 @@ fun FlowAppShell(
     }
 
     val (currentTitle, currentSubtitle) = when (uiState.selectedTab) {
-        FlowTab.INBOX -> {
-            val pendingCount = uiState.inboxTasks.count { !it.isCompleted }
-            "Inbox" to if (pendingCount > 0) {
-                "$pendingCount ${if (pendingCount == 1) "item" else "items"} to clarify"
-            } else {
-                "Inbox Zero achieved ✨"
-            }
-        }
-        FlowTab.TODAY_NEXT -> {
-            val total = uiState.totalTodayTargetCount
-            val completed = uiState.completedTodayCount
-            val upcoming = uiState.upcomingWeekTotalCount
-            "Today & Next" to if (total > 0) {
-                "$completed of $total today • $upcoming queued this week"
-            } else {
-                "No urgent commitments today • $upcoming queued this week"
+        FlowTab.TASKS -> {
+            val sections = uiState.taskSections
+            val dueNow = sections.overdue.size + sections.today.size
+            "Tasks" to when {
+                sections.overdue.isNotEmpty() -> "${sections.overdue.size} overdue • ${sections.today.size} due today"
+                dueNow > 0 -> "$dueNow due today • ${sections.openCount} open"
+                sections.openCount > 0 -> "Nothing due today • ${sections.openCount} open"
+                else -> "All clear ✨"
             }
         }
         FlowTab.CALENDAR -> {
@@ -205,10 +188,6 @@ fun FlowAppShell(
             } else {
                 "Schedule & Agenda • Check events off as you go"
             }
-        }
-        FlowTab.PROJECTS -> {
-            val projectCount = uiState.projects.size
-            "Projects" to "$projectCount active ${if (projectCount == 1) "outcome" else "outcomes"}"
         }
         FlowTab.GOALS -> {
             val met = uiState.completedGoalsCount
@@ -321,72 +300,21 @@ fun FlowAppShell(
                 modifier = Modifier.fillMaxSize()
             ) { tab ->
                 when (tab) {
-                    FlowTab.INBOX -> InboxScreen(
-                        tasks = uiState.inboxTasks,
-                        projects = uiState.projects,
-                        onToggleComplete = viewModel::toggleTaskCompletion,
-                        onToggleFlag = viewModel::toggleTaskFlag,
-                        onMoveBucket = viewModel::updateTaskBucket,
-                        onAssignToday = { taskId ->
-                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                        },
-                        onDeleteTask = viewModel::deleteTask,
-                        onQuickAddClick = { viewModel.setQuickCaptureOpen(true) },
-                        onToggleSubtask = viewModel::toggleSubtaskCompletion,
-                        onAddSubtask = viewModel::addSubtask,
-                        onDeleteSubtask = viewModel::deleteSubtask,
-                        selectedContextTag = uiState.selectedContextTag,
-                        onSelectContextFilter = viewModel::selectContextFilter,
-                        onStartFocus = { taskId, taskTitle ->
-                            viewModel.startFocusSession(taskId, taskTitle)
-                        },
-                        contentPadding = screenContentPadding,
-                        listState = inboxListState
-                    )
-
-                    FlowTab.TODAY_NEXT -> TodayNextScreen(
-                        todayTasks = uiState.todayTasks,
-                        nextActionTasks = uiState.nextActionTasks,
-                        upcomingWeekDays = uiState.upcomingWeekDays,
-                        laterScheduledTasks = uiState.laterScheduledTasks,
-                        upcomingWeekTotalCount = uiState.upcomingWeekTotalCount,
-                        projects = uiState.projects,
-                        completedTodayCount = uiState.completedTodayCount,
-                        totalTodayTargetCount = uiState.totalTodayTargetCount,
-                        dailyProgress = uiState.dailyProgress,
-                        evaluatedGoals = uiState.evaluatedGoals,
-                        contributionChart = uiState.contributionChart,
+                    FlowTab.TASKS -> TasksScreen(
+                        sections = uiState.taskSections,
                         healthSnapshot = uiState.healthSnapshot,
-                        shizukuStatus = uiState.shizukuStatus,
-                        syncSystemColorsWithShizuku = uiState.accessibility.syncSystemColorsWithShizuku,
-                        onRequestHealthPermissions = onRequestHealthPermissions,
-                        onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus,
-                        onAddQuickHealthGoal = { metric, target ->
-                            viewModel.addQuickHealthGoalTask(metric, target, isDailyRecurring = true)
-                        },
-                        onOpenGoalsTab = { viewModel.selectTab(FlowTab.GOALS) },
-                        onOpenGoalCreator = { viewModel.setGoalCreatorOpen(true) },
-                        onOpenSettings = { viewModel.setSettingsOpen(true) },
+                        completedTodayCount = uiState.completedTodayCount,
+                        totalTodayCount = uiState.totalTodayTargetCount,
+                        dailyProgress = uiState.dailyProgress,
                         onToggleComplete = viewModel::toggleTaskCompletion,
                         onToggleFlag = viewModel::toggleTaskFlag,
-                        onMoveBucket = viewModel::updateTaskBucket,
-                        onAssignToday = { taskId ->
-                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                        },
+                        onSetDueDate = viewModel::assignTaskDate,
                         onDeleteTask = viewModel::deleteTask,
+                        onUpdateText = viewModel::updateTaskText,
                         onToggleSubtask = viewModel::toggleSubtaskCompletion,
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
-                        selectedContextTag = uiState.selectedContextTag,
-                        onSelectContextFilter = viewModel::selectContextFilter,
-                        onStartFocus = { taskId, taskTitle ->
-                            viewModel.startFocusSession(taskId, taskTitle)
-                        },
-                        isFocusActive = uiState.focusSession.isActive,
-                        focusRemainingFormatted = uiState.focusSession.formattedRemaining,
-                        onOpenFocusSheet = { viewModel.setFocusSheetOpen(true) },
-                        onOpenMorningRitual = viewModel::openMorningRitual,
-                        onOpenEveningRitual = viewModel::openEveningRitual,
+                        onQuickAdd = { viewModel.setQuickCaptureOpen(true) },
                         coachCard = {
                             CoachCard(
                                 controller = coach,
@@ -395,7 +323,7 @@ fun FlowAppShell(
                             )
                         },
                         contentPadding = screenContentPadding,
-                        listState = todayListState
+                        listState = tasksListState
                     )
 
                     FlowTab.CALENDAR -> CalendarScreen(
@@ -420,32 +348,8 @@ fun FlowAppShell(
                         listState = calendarListState
                     )
 
-                    FlowTab.PROJECTS -> ProjectsScreen(
-                        projectsWithStats = uiState.projectsWithStats,
-                        somedayTasks = uiState.somedayTasks,
-                        allProjects = uiState.projects,
-                        onToggleComplete = viewModel::toggleTaskCompletion,
-                        onToggleFlag = viewModel::toggleTaskFlag,
-                        onMoveBucket = viewModel::updateTaskBucket,
-                        onAssignToday = { taskId ->
-                            viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                        },
-                        onDeleteTask = viewModel::deleteTask,
-                        onAddProject = viewModel::addProject,
-                        onDeleteProject = viewModel::deleteProject,
-                        onToggleSubtask = viewModel::toggleSubtaskCompletion,
-                        onAddSubtask = viewModel::addSubtask,
-                        onDeleteSubtask = viewModel::deleteSubtask,
-                        onStartFocus = { taskId, taskTitle ->
-                            viewModel.startFocusSession(taskId, taskTitle)
-                        },
-                        contentPadding = screenContentPadding,
-                        listState = projectsListState
-                    )
-
                     FlowTab.GOALS -> GoalsScreen(
                         evaluatedGoals = uiState.evaluatedGoals,
-                        projects = uiState.projects,
                         goalMomentumProgress = uiState.goalMomentumProgress,
                         contributionChart = uiState.contributionChart,
                         healthSnapshot = uiState.healthSnapshot,
@@ -495,7 +399,7 @@ fun FlowAppShell(
             // Floating Island Navigation Bar with Quick-Capture / Goal-Creator Button
             FluidIslandNavBar(
                 selectedTab = uiState.selectedTab,
-                inboxBadgeCount = uiState.inboxTasks.count { !it.isCompleted },
+                tasksBadgeCount = uiState.taskSections.overdue.size + uiState.taskSections.today.size,
                 onTabSelected = viewModel::selectTab,
                 onQuickAddClick = {
                     if (uiState.selectedTab == FlowTab.GOALS) {
@@ -530,30 +434,26 @@ fun FlowAppShell(
             )
         }
 
-        // Living Flow Quick-Capture Sheet (GTD Tasks + NLP Smart Parse + Voice + Subtasks)
+        // Quick Capture (smart dates + voice + subtasks)
         if (uiState.isQuickCaptureOpen) {
             var captureSaved by remember { mutableStateOf(false) }
             QuickCaptureSheet(
-                projects = uiState.projects,
                 initialTitle = uiState.quickCaptureInitialTitle,
                 autoStartVoice = uiState.quickCaptureAutoVoice,
                 onDismiss = {
                     viewModel.setQuickCaptureOpen(false)
                     onQuickCaptureClosed(captureSaved)
                 },
-                onSaveTask = { title, notes, bucket, dueDateEpochDay, projectId, isFlagged, recurrenceRule, healthGoal, subtasks, contextTag ->
+                onSaveTask = { title, notes, dueDateEpochDay, isFlagged, recurrenceRule, healthGoal, subtasks ->
                     captureSaved = true
                     viewModel.addTask(
                         title = title,
                         notes = notes,
-                        bucket = bucket,
                         dueDateEpochDay = dueDateEpochDay,
-                        projectId = projectId,
                         isFlagged = isFlagged,
                         recurrenceRule = recurrenceRule,
                         healthGoal = healthGoal,
-                        subtasks = subtasks,
-                        contextTag = contextTag
+                        subtasks = subtasks
                     )
                 },
                 onBatchAddTasks = { drafts ->
@@ -566,7 +466,6 @@ fun FlowAppShell(
         // Living Flow Dedicated Goal Creator Sheet (Task Milestones, Health Connect, App Usage Limits)
         if (uiState.isGoalCreatorOpen) {
             GoalCreatorSheet(
-                projects = uiState.projects,
                 installedApps = uiState.appUsageSnapshot.installedApps,
                 hasUsagePermission = uiState.appUsageSnapshot.hasUsagePermission,
                 hasHealthPermissions = uiState.healthSnapshot.hasAllPermissions,
@@ -619,51 +518,6 @@ fun FlowAppShell(
                 onRestoreSystemPalette = viewModel::restoreOriginalSystemPalette,
                 onRequestHealthPermissions = onRequestHealthPermissions,
                 onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus
-            )
-        }
-
-        // Deep Flow Focus Mode Sheet (Zero-asset procedural soundscapes + liquid timer)
-        if (uiState.isFocusSheetOpen) {
-            FocusModeSheet(
-                focusState = uiState.focusSession,
-                dailyProgress = uiState.dailyProgress,
-                onTogglePlayPause = viewModel::toggleFocusPlayPause,
-                onResetTimer = viewModel::resetFocusTimer,
-                onAddFiveMinutes = viewModel::addFiveMinutesToFocus,
-                onSelectSoundscape = viewModel::selectFocusSoundscape,
-                onCompleteTask = { taskId ->
-                    viewModel.toggleTaskCompletion(taskId)
-                    viewModel.closeFocusSession()
-                },
-                onDismiss = { viewModel.setFocusSheetOpen(false) }
-            )
-        }
-
-        // Daily GTD Rituals Sheet (Morning "Wake to Flow" & Evening "Sunset Review")
-        if (uiState.dailyRitual.isMorningOpen || uiState.dailyRitual.isEveningOpen) {
-            val ritualType = if (uiState.dailyRitual.isMorningOpen) DailyRitualType.MORNING_WAKE else DailyRitualType.EVENING_SUNSET
-            DailyRitualSheet(
-                ritualType = ritualType,
-                todayTasks = uiState.todayTasks,
-                inboxTasks = uiState.inboxTasks,
-                rolloverTasks = uiState.rolloverTasks,
-                healthSnapshot = uiState.healthSnapshot,
-                dailyProgress = uiState.dailyProgress,
-                completedTodayCount = uiState.completedTodayCount,
-                totalTodayTargetCount = uiState.totalTodayTargetCount,
-                onAssignToday = { taskId ->
-                    viewModel.assignTaskDate(taskId, LocalDate.now().toEpochDay())
-                },
-                onMoveBucket = viewModel::updateTaskBucket,
-                onToggleTaskComplete = viewModel::toggleTaskCompletion,
-                onCompleteRitual = { top3 ->
-                    if (ritualType == DailyRitualType.MORNING_WAKE) {
-                        viewModel.completeMorningRitual(top3)
-                    } else {
-                        viewModel.completeEveningRitual()
-                    }
-                },
-                onDismiss = viewModel::dismissRituals
             )
         }
 

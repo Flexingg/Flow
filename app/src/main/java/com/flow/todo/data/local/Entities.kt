@@ -10,7 +10,6 @@ import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthGoalSpec
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
@@ -128,35 +127,39 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     id = id,
     title = title,
     notes = notes,
-    bucket = runCatching { GtdBucket.valueOf(bucketName) }.getOrDefault(GtdBucket.INBOX),
     dueDateEpochDay = dueDateEpochDay,
-    projectId = projectId,
     isFlagged = isFlagged,
     isCompleted = isCompleted,
     recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),
     healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
     subtasks = SubtaskItem.listFromStorageString(subtasksRaw),
-    contextTag = contextTag,
     createdAt = createdAt,
     completedAt = completedAt
 )
 
+/**
+ * bucketName / projectId / contextTag are legacy GTD columns. They stay in the schema (the main
+ * database uses destructive migration, so dropping columns would wipe data) but are no longer used.
+ */
 fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     id = id,
     title = title,
     notes = notes,
-    bucketName = bucket.name,
+    bucketName = LEGACY_BUCKET,
     dueDateEpochDay = dueDateEpochDay,
-    projectId = projectId,
+    projectId = null,
     isFlagged = isFlagged,
     isCompleted = isCompleted,
     recurrenceRuleRaw = recurrenceRule?.toStorageString(),
     healthGoalRaw = healthGoal?.toStorageString(),
     subtasksRaw = SubtaskItem.listToStorageString(subtasks),
-    contextTag = contextTag,
+    contextTag = null,
     createdAt = createdAt,
     completedAt = completedAt
 )
+
+/** Written to the unused legacy bucket column. */
+const val LEGACY_BUCKET = "TASK"
 
 fun GoalEntity.toDomain(): FlowGoal = FlowGoal(
     id = id,

@@ -21,7 +21,6 @@ import com.flow.todo.data.local.FlowDao
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.widget.FlowCoachWidgetProvider
@@ -160,7 +159,6 @@ class CoachEngine(
             CoachTaskInput(
                 id = t.id,
                 title = t.title,
-                bucket = runCatching { GtdBucket.valueOf(t.bucketName) }.getOrDefault(GtdBucket.INBOX),
                 dueEpochDay = t.dueDateEpochDay,
                 isFlagged = t.isFlagged,
                 isCompleted = t.isCompleted,

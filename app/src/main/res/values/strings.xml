@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Flow</string>
-    <string name="cd_inbox_tab">Inbox tab</string>
-    <string name="cd_today_next_tab">Today and Next Action tab</string>
+    <string name="cd_inbox_tab">Tasks tab</string>
+    <string name="cd_today_next_tab">Tasks tab</string>
     <string name="cd_projects_tab">Projects tab</string>
     <string name="cd_quick_add_task">Quick add task</string>
     <string name="cd_complete_task">Mark task as complete</string>
@@ -21,8 +21,8 @@
     <string name="shortcut_voice_capture_long">Voice Capture Task</string>
     <string name="shortcut_goals_short">Goals &amp; Heatmap</string>
     <string name="shortcut_goals_long">Open Goals &amp; Heatmap</string>
-    <string name="shortcut_today_short">Today &amp; Next</string>
-    <string name="shortcut_today_long">Open Today &amp; Next Actions</string>
+    <string name="shortcut_today_short">Tasks</string>
+    <string name="shortcut_today_long">Open Tasks</string>
     <string name="coach_widget_label">AI Coach</string>
     <string name="coach_widget_refresh">Get a new coach message</string>
     <string name="coach_widget_description">Your AI coach persona tells you what you are doing well and what to work on next</string>

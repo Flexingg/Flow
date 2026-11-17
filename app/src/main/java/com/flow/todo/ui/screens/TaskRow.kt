@@ -41,13 +41,11 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EventBusy
 import androidx.compose.material.icons.rounded.Flag
-import androidx.compose.material.icons.rounded.Lightbulb
-import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,9 +73,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
-import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.TaskItem
 import com.flow.todo.ui.components.FluidGlowingProgressBar
 import com.flow.todo.ui.components.FluidMarkdownText
@@ -94,17 +90,16 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun TaskRow(
     task: TaskItem,
-    project: Project?,
     onToggleComplete: () -> Unit,
     onToggleFlag: () -> Unit,
-    onMoveBucket: (GtdBucket) -> Unit,
-    onAssignToday: () -> Unit,
+    /** Set (or clear with null) the due date as an epoch day. */
+    onSetDueDate: (Long?) -> Unit,
     onDelete: () -> Unit,
     onToggleSubtask: (String) -> Unit = {},
     onAddSubtask: (String) -> Unit = {},
     onDeleteSubtask: (String) -> Unit = {},
     healthSnapshot: HealthDailySnapshot? = null,
-    onStartFocus: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -113,7 +108,7 @@ fun TaskRow(
     var newSubtaskTitle by remember { mutableStateOf("") }
 
     val isReducedMotion = FluidTheme.isReducedMotion
-    val accentTint = project?.let { Color(it.colorHex) } ?: FluidTheme.colors.accent
+    val accentTint = FluidTheme.colors.accent
 
     // Bubbly Checkbox Spring Spec
     val checkboxSpringSpec: FiniteAnimationSpec<Float> = if (isReducedMotion) {
@@ -173,30 +168,57 @@ fun TaskRow(
     val badgeEnter = scaleIn(FluidSprings.release(isReducedMotion)) + expandHorizontally()
     val badgeExit = scaleOut(FluidSprings.release(isReducedMotion)) + shrinkHorizontally()
 
-    val menuActions = remember(task, project, onStartFocus) {
+    val menuActions = remember(task, onEdit) {
         val actions = mutableListOf<FluidMenuAction>()
-        if (onStartFocus != null && !task.isCompleted) {
+        val todayEpoch = LocalDate.now().toEpochDay()
+        if (onEdit != null) {
             actions.add(
                 FluidMenuAction(
-                    label = "Deep Flow Focus (25m)",
-                    icon = Icons.Rounded.SelfImprovement,
+                    label = "Edit",
+                    icon = Icons.Rounded.Edit,
                     onSelect = {
                         menuExpanded = false
-                        onStartFocus()
+                        onEdit()
                     }
                 )
             )
         }
-        actions.add(
-            FluidMenuAction(
-                label = "Do Today",
-                icon = Icons.Rounded.Today,
-                onSelect = {
-                    menuExpanded = false
-                    onAssignToday()
-                }
+        if (task.dueDateEpochDay != todayEpoch) {
+            actions.add(
+                FluidMenuAction(
+                    label = "Do today",
+                    icon = Icons.Rounded.Today,
+                    onSelect = {
+                        menuExpanded = false
+                        onSetDueDate(todayEpoch)
+                    }
+                )
             )
-        )
+        }
+        if (task.dueDateEpochDay != todayEpoch + 1) {
+            actions.add(
+                FluidMenuAction(
+                    label = "Tomorrow",
+                    icon = Icons.Rounded.DateRange,
+                    onSelect = {
+                        menuExpanded = false
+                        onSetDueDate(todayEpoch + 1)
+                    }
+                )
+            )
+        }
+        if (task.dueDateEpochDay != null) {
+            actions.add(
+                FluidMenuAction(
+                    label = "Remove date",
+                    icon = Icons.Rounded.EventBusy,
+                    onSelect = {
+                        menuExpanded = false
+                        onSetDueDate(null)
+                    }
+                )
+            )
+        }
         actions.add(
             FluidMenuAction(
                 label = "Add / Manage Subtasks",
@@ -205,26 +227,6 @@ fun TaskRow(
                     menuExpanded = false
                     subtasksExpanded = true
                     showAddSubtaskInput = true
-                }
-            )
-        )
-        actions.add(
-            FluidMenuAction(
-                label = "Move to Next Action",
-                icon = Icons.Rounded.PlayArrow,
-                onSelect = {
-                    menuExpanded = false
-                    onMoveBucket(GtdBucket.NEXT_ACTION)
-                }
-            )
-        )
-        actions.add(
-            FluidMenuAction(
-                label = "Move to Someday",
-                icon = Icons.Rounded.Lightbulb,
-                onSelect = {
-                    menuExpanded = false
-                    onMoveBucket(GtdBucket.SOMEDAY)
                 }
             )
         )
@@ -377,14 +379,12 @@ fun TaskRow(
                     )
                 }
 
-                // Badges row: Project, Subtasks, Recurrence, Due Date, Health Goal, Context, Flag with bubbly micro-interactions
-                val hasBadges = project != null ||
-                    task.subtasks.isNotEmpty() ||
+                // Badges row: Subtasks, Recurrence, Due Date, Health Goal, Flag with bubbly micro-interactions
+                val hasBadges = task.subtasks.isNotEmpty() ||
                     task.dueDateEpochDay != null ||
                     task.isFlagged ||
                     task.recurrenceRule?.isRecurring == true ||
-                    task.healthGoal != null ||
-                    !task.contextTag.isNullOrBlank()
+                    task.healthGoal != null
 
                 this@Column.AnimatedVisibility(
                     visible = hasBadges,
@@ -396,38 +396,6 @@ fun TaskRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(top = FluidSpacing.xs)
                     ) {
-                        // Project Badge
-                        if (project != null) {
-                            val projectColor = Color(project.colorHex)
-                            Box(
-                                modifier = Modifier
-                                    .clip(FluidShapes.full)
-                                    .background(projectColor.copy(alpha = 0.12f))
-                                    .border(1.dp, projectColor.copy(alpha = 0.28f), FluidShapes.full)
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(projectColor)
-                                    )
-                                    Text(
-                                        text = project.name,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = projectColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-
                         // Subtasks Progress Badge (toggles checklist expansion)
                         if (task.subtasks.isNotEmpty()) {
                             val allSubtasksDone = task.completedSubtasksCount == task.totalSubtasksCount
@@ -558,36 +526,6 @@ fun TaskRow(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = FluidTheme.colors.accent
-                                    )
-                                }
-                            }
-                        }
-
-                        // GTD Context Badge (@work, @home, @errands, etc.)
-                        if (!task.contextTag.isNullOrBlank()) {
-                            val ctxColor = FluidTheme.colors.accent
-                            Box(
-                                modifier = Modifier
-                                    .clip(FluidShapes.full)
-                                    .background(ctxColor.copy(alpha = 0.12f))
-                                    .border(1.dp, ctxColor.copy(alpha = 0.28f), FluidShapes.full)
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.LocationOn,
-                                        contentDescription = "Context",
-                                        tint = ctxColor,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Text(
-                                        text = task.contextTag,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = ctxColor
                                     )
                                 }
                             }

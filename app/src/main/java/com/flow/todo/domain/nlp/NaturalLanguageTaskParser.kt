@@ -1,10 +1,7 @@
 package com.flow.todo.domain.nlp
 
-import com.flow.todo.domain.model.GtdBucket
-import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.ParsedTaskDraft
 import com.flow.todo.domain.model.ParsedTaskSuggestion
-import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.RecurrenceType
 import java.time.DayOfWeek
@@ -16,9 +13,6 @@ import java.util.Locale
 object NaturalLanguageTaskParser {
 
     private val priorityRegex = Regex("""(?i)(?:^|\s)(!flag|!high|!urgent|!important|!p1|!!)(?=\s|$)""")
-    private val bucketRegex = Regex("""(?i)(?:^|\s)@(inbox|next|someday|maybe|scheduled)(?=\s|$)""")
-    private val contextTagRegex = Regex("""(?i)(?:^|\s)(@(work|home|errands|gym|calls|store|office|desk))(?=\s|$)""")
-    private val projectRegex = Regex("""#\"([^\"]+)\"|#([A-Za-z0-9_-]+)""")
 
     private val dailyRegex = Regex("""(?i)\b(every\s+day|daily)\b""")
     private val everyNDaysRegex = Regex("""(?i)\bevery\s+(\d+)\s+days?\b""")
@@ -45,7 +39,6 @@ object NaturalLanguageTaskParser {
     fun parse(
         rawTitle: String,
         rawNotes: String = "",
-        projects: List<Project> = emptyList(),
         today: LocalDate = LocalDate.now()
     ): ParsedTaskSuggestion {
         if (rawTitle.isBlank() && rawNotes.isBlank()) {
@@ -72,65 +65,6 @@ object NaturalLanguageTaskParser {
             isFlagged = true
             detectedTokens.add("🚩 Priority Flag")
             workingTitle = workingTitle.removeRange(priorityMatch.range)
-        }
-
-        // 2. GTD Bucket
-        var bucket: GtdBucket? = null
-        val bucketMatch = bucketRegex.find(workingTitle)
-        if (bucketMatch != null) {
-            val rawBucket = bucketMatch.groupValues[1].lowercase(Locale.US)
-            bucket = when (rawBucket) {
-                "inbox" -> GtdBucket.INBOX
-                "next" -> GtdBucket.NEXT_ACTION
-                "scheduled" -> GtdBucket.SCHEDULED
-                "someday", "maybe" -> GtdBucket.SOMEDAY
-                else -> null
-            }
-            if (bucket != null) {
-                detectedTokens.add("📥 @${bucket.label}")
-                workingTitle = workingTitle.removeRange(bucketMatch.range)
-            }
-        }
-
-        // 3. Project (#ProjectName or #"Multi Word")
-        var matchedProject: Project? = null
-        var suggestedNewProjectName: String? = null
-        val projectMatch = projectRegex.find(workingTitle)
-        if (projectMatch != null) {
-            val tagText = projectMatch.groupValues[1].ifBlank { projectMatch.groupValues[2] }.trim()
-            if (tagText.isNotBlank()) {
-                val found = projects.firstOrNull { it.name.equals(tagText, ignoreCase = true) }
-                    ?: projects.firstOrNull { it.name.startsWith(tagText, ignoreCase = true) }
-                    ?: projects.firstOrNull { it.name.contains(tagText, ignoreCase = true) }
-
-                if (found != null) {
-                    matchedProject = found
-                    detectedTokens.add("📁 #${found.name}")
-                } else {
-                    val formattedNewName = tagText.replace('-', ' ').replace('_', ' ').trim()
-                    suggestedNewProjectName = formattedNewName
-                    detectedTokens.add("📁 #$formattedNewName (New)")
-                }
-                workingTitle = workingTitle.removeRange(projectMatch.range)
-            }
-        }
-
-        // 3.5 GTD Context Tag (@work, @home, @errands, etc.)
-        var contextTag: String? = null
-        val ctxMatch = contextTagRegex.find(workingTitle)
-        if (ctxMatch != null) {
-            val matchedTag = ctxMatch.groupValues[1].lowercase(Locale.getDefault())
-            contextTag = matchedTag
-            val label = GtdContext.ALL.firstOrNull { it.tag.equals(matchedTag, ignoreCase = true) }?.label ?: matchedTag
-            detectedTokens.add("📍 $matchedTag ($label)")
-            workingTitle = workingTitle.removeRange(ctxMatch.range)
-        } else {
-            // Semantic keyword auto-detection if no explicit @tag
-            val semanticContext = GtdContext.findMatchingContext(workingTitle)
-            if (semanticContext != null) {
-                contextTag = semanticContext.tag
-                detectedTokens.add("📍 ${semanticContext.tag} (${semanticContext.label})")
-            }
         }
 
         // 4. Recurrence Rule (evaluated before single due dates so "every monday" isn't consumed as "monday")
@@ -342,14 +276,10 @@ object NaturalLanguageTaskParser {
             cleanedTitle = finalTitle,
             dueDateEpochDay = dueDateEpochDay,
             dueDateLabel = dueDateLabel,
-            matchedProject = matchedProject,
-            suggestedNewProjectName = suggestedNewProjectName,
             isFlagged = isFlagged,
-            bucket = bucket,
             recurrenceRule = recurrenceRule,
             extractedSubtasks = extractedSubtasks,
-            detectedTokens = detectedTokens,
-            contextTag = contextTag
+            detectedTokens = detectedTokens
         )
     }
 
@@ -380,20 +310,16 @@ object NaturalLanguageTaskParser {
 
     fun parseMultiple(
         input: String,
-        projects: List<Project> = emptyList(),
         today: LocalDate = LocalDate.now()
     ): List<ParsedTaskDraft> {
         val clauses = splitMultiTaskInput(input)
         return clauses.map { clause ->
-            val suggestion = parse(clause, projects = projects, today = today)
+            val suggestion = parse(clause, today = today)
             ParsedTaskDraft(
                 title = suggestion.cleanedTitle,
-                bucket = suggestion.bucket ?: GtdBucket.INBOX,
                 dueDateEpochDay = suggestion.dueDateEpochDay,
-                projectId = suggestion.matchedProject?.id,
                 isFlagged = suggestion.isFlagged,
-                recurrenceRule = suggestion.recurrenceRule,
-                contextTag = suggestion.contextTag
+                recurrenceRule = suggestion.recurrenceRule
             )
         }
     }

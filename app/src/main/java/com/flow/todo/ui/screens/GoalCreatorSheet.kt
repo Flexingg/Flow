@@ -69,7 +69,6 @@ import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.InstalledAppInfo
-import com.flow.todo.domain.model.Project
 import com.flow.todo.ui.components.FluidFilterChip
 import com.flow.todo.ui.components.FluidPillButton
 import com.flow.todo.ui.theme.FluidShapes
@@ -116,7 +115,6 @@ private enum class CreatorTab {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GoalCreatorSheet(
-    projects: List<Project>,
     installedApps: List<InstalledAppInfo>,
     hasUsagePermission: Boolean,
     hasHealthPermissions: Boolean,
@@ -215,10 +213,9 @@ fun GoalCreatorSheet(
     ) {
         when (selectedCategory) {
             GoalCategory.TASK_COMPLETION -> {
-                val projectName = projects.firstOrNull { it.id == taskProjectId }?.name ?: "All"
                 val compSym = taskComparison.symbol
                 val periodStr = taskPeriod.label
-                "Complete $compSym ${taskTargetValue.toInt()} $projectName Tasks ($periodStr)"
+                "Complete $compSym ${taskTargetValue.toInt()} Tasks ($periodStr)"
             }
             GoalCategory.HEALTH_CONNECT -> {
                 val metric = selectedHealthMetric
@@ -425,37 +422,6 @@ fun GoalCreatorSheet(
                                         label = period.label,
                                         selected = taskPeriod == period,
                                         onClick = { taskPeriod = period }
-                                    )
-                                }
-                            }
-
-                            // Project Scope: All Tasks vs Specific Project
-                            Text(
-                                text = "PROJECT SCOPE",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                                color = colors.textTertiary
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FluidFilterChip(
-                                    label = "All Tasks (General)",
-                                    selected = taskProjectId == null,
-                                    onClick = { taskProjectId = null }
-                                )
-                                projects.forEach { project ->
-                                    val projectColor = Color(project.colorHex)
-                                    FluidFilterChip(
-                                        label = project.name,
-                                        selected = taskProjectId == project.id,
-                                        onClick = { taskProjectId = project.id },
-                                        accentColor = projectColor,
-                                        leadingIcon = Icons.Rounded.Folder
                                     )
                                 }
                             }

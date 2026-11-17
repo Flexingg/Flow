@@ -1556,7 +1556,7 @@ fun FluidSettingsSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Living Flow GTD • In-Place Updates Enabled",
+                        text = "Flow • Tasks, Calendar & Goals",
                         fontSize = 11.sp,
                         color = FluidTheme.colors.textTertiary
                     )

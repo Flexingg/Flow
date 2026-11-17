@@ -25,7 +25,6 @@ import com.flow.todo.MainActivity
 import com.flow.todo.R
 import com.flow.todo.data.local.FlowDatabase
 import com.flow.todo.domain.model.DEFAULT_MOMENTUM_STOPS_HEX
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.system.FlowQuickSettingsTileService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -122,11 +121,9 @@ class FlowGlassWidgetProvider : AppWidgetProvider() {
                         val nextCandidate = updatedTasks
                             .filter { !it.isCompleted }
                             .sortedWith(
-                                compareByDescending<com.flow.todo.data.local.TaskEntity> {
-                                    it.bucketName == GtdBucket.SCHEDULED.name || it.bucketName == GtdBucket.NEXT_ACTION.name
-                                }
+                                // Soonest due first (overdue/today on top), flagged breaks ties, undated last
+                                compareBy<com.flow.todo.data.local.TaskEntity> { it.dueDateEpochDay ?: Long.MAX_VALUE }
                                     .thenByDescending { it.isFlagged }
-                                    .thenBy { it.dueDateEpochDay ?: Long.MAX_VALUE }
                                     .thenByDescending { it.createdAt }
                             )
                             .firstOrNull()
