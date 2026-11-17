@@ -72,7 +72,6 @@ import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthMetricType
-import com.flow.todo.domain.model.Project
 import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.ui.components.FluidContributionChart
 import com.flow.todo.ui.components.FluidFilterChip
@@ -108,7 +107,6 @@ private enum class GoalFilterTab(val label: String) {
 @Composable
 fun GoalsScreen(
     evaluatedGoals: List<EvaluatedGoal>,
-    projects: List<Project>,
     goalMomentumProgress: Float,
     healthSnapshot: HealthDailySnapshot,
     appUsageSnapshot: AppUsageSnapshot,
@@ -386,12 +384,9 @@ fun GoalsScreen(
             }
         } else {
             items(filteredGoals, key = { it.goal.id }) { evaluatedGoal ->
-                val projectColorHex = evaluatedGoal.goal.projectId?.let { pid ->
-                    projects.firstOrNull { it.id == pid }?.colorHex
-                }
                 FluidGoalMeterCard(
                     evaluatedGoal = evaluatedGoal,
-                    projectColorHex = projectColorHex,
+                    projectColorHex = null,
                     onDeleteGoal = { onDeleteGoal(evaluatedGoal.goal.id) },
                     modifier = Modifier.padding(bottom = FluidSpacing.sm)
                 )
@@ -967,30 +962,6 @@ fun GoalsScreen(
                             leadingIcon = Icons.Rounded.TaskAlt
                         )
 
-                        // If user has a project, add preset for the first project
-                        projects.firstOrNull()?.let { project ->
-                            FluidFilterChip(
-                                label = "+ 3 ${project.name} Tasks Today",
-                                selected = false,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onAddPresetGoal(
-                                        "Complete ≥ 3 ${project.name} Tasks (Daily)",
-                                        GoalCategory.TASK_COMPLETION,
-                                        GoalComparison.AT_LEAST,
-                                        3.0,
-                                        GoalPeriod.DAILY,
-                                        project.id,
-                                        null,
-                                        null,
-                                        null,
-                                        null
-                                    )
-                                },
-                                leadingIcon = Icons.Rounded.Folder,
-                                accentColor = Color(project.colorHex)
-                            )
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(FluidSpacing.sm))

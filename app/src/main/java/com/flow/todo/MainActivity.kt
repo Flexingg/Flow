@@ -208,10 +208,10 @@ class MainActivity : ComponentActivity() {
                 viewModel.selectTab(FlowTab.CALENDAR)
             }
             FlowGlassWidgetProvider.ACTION_OPEN_TODAY -> {
-                viewModel.selectTab(FlowTab.TODAY_NEXT)
+                viewModel.selectTab(FlowTab.TASKS)
             }
             FlowCoachWidgetProvider.ACTION_OPEN_COACH -> {
-                viewModel.selectTab(FlowTab.TODAY_NEXT)
+                viewModel.selectTab(FlowTab.TASKS)
                 val coach = CoachController.get(applicationContext)
                 val s = coach.settings.value
                 if (!s.enabled || s.provider !in coach.configuredProviders.value) coach.requestSettings()

@@ -15,7 +15,6 @@ import com.flow.todo.domain.model.FlowGoal
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthGoalSpec
 import com.flow.todo.domain.model.HealthMetricType
 import com.flow.todo.domain.model.Project
@@ -801,9 +800,7 @@ class FirestoreSyncManager(
             "id" to task.id,
             "title" to task.title,
             "notes" to task.notes,
-            "bucketName" to task.bucket.name,
             "dueDateEpochDay" to task.dueDateEpochDay,
-            "projectId" to task.projectId,
             "isFlagged" to task.isFlagged,
             "isCompleted" to task.isCompleted,
             "recurrenceRuleRaw" to task.recurrenceRule?.toStorageString(),
@@ -817,10 +814,7 @@ class FirestoreSyncManager(
             val id = (data["id"] as? String)?.takeIf { it.isNotBlank() } ?: docId
             val title = data["title"] as? String ?: ""
             val notes = data["notes"] as? String ?: ""
-            val bucketName = data["bucketName"] as? String ?: GtdBucket.INBOX.name
-            val bucket = runCatching { GtdBucket.valueOf(bucketName) }.getOrDefault(GtdBucket.INBOX)
             val dueDateEpochDay = (data["dueDateEpochDay"] as? Number)?.toLong()
-            val projectId = data["projectId"] as? String
             val isFlagged = data["isFlagged"] as? Boolean ?: false
             val isCompleted = data["isCompleted"] as? Boolean ?: false
             val recurrenceRuleRaw = data["recurrenceRuleRaw"] as? String
@@ -833,9 +827,7 @@ class FirestoreSyncManager(
                 id = id,
                 title = title,
                 notes = notes,
-                bucket = bucket,
                 dueDateEpochDay = dueDateEpochDay,
-                projectId = projectId,
                 isFlagged = isFlagged,
                 isCompleted = isCompleted,
                 recurrenceRule = RecurrenceRule.fromStorageString(recurrenceRuleRaw),

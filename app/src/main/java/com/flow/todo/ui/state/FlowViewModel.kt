@@ -27,18 +27,14 @@ import com.flow.todo.domain.model.FlowTab
 import com.flow.todo.domain.model.GoalCategory
 import com.flow.todo.domain.model.GoalComparison
 import com.flow.todo.domain.model.GoalPeriod
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthDailySnapshot
 import com.flow.todo.domain.model.HealthGoalSpec
 import com.flow.todo.domain.model.HealthMetricType
-import com.flow.todo.domain.model.Project
-import com.flow.todo.domain.model.ProjectWithStats
 import com.flow.todo.domain.model.RecurrenceRule
 import com.flow.todo.domain.model.RecurrenceType
 import com.flow.todo.domain.model.ShizukuStatus
 import com.flow.todo.domain.model.SubtaskItem
 import com.flow.todo.domain.model.TaskItem
-import com.flow.todo.domain.model.UpcomingDayGroup
 import com.flow.todo.widget.FlowCalendarWidgetProvider
 import com.flow.todo.widget.FlowGlassWidgetProvider
 import kotlinx.coroutines.flow.Flow
@@ -63,22 +59,18 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToLong
 
-import com.flow.todo.data.audio.FluidAudioSynthesizer
-import com.flow.todo.domain.model.AmbientSoundscape
-import com.flow.todo.domain.model.DailyRitualState
-import com.flow.todo.domain.model.FocusSessionState
-import com.flow.todo.domain.model.GtdContext
 import com.flow.todo.domain.model.ParsedTaskDraft
-import kotlinx.coroutines.Job
+import com.flow.todo.domain.tasks.TaskSections
 import kotlinx.coroutines.delay
 
 val FlowGoal.isEnabled: Boolean
     get() = this.id !in FlowViewModel.globalDisabledGoalIds.value
 
 data class FlowUiState(
-    val selectedTab: FlowTab = FlowTab.INBOX,
+    val selectedTab: FlowTab = FlowTab.TASKS,
     val allTasks: List<TaskItem> = emptyList(),
-    val projects: List<Project> = emptyList(),
+    /** The Tasks screen: overdue / today / upcoming / no date / done today. */
+    val taskSections: TaskSections = TaskSections(),
     val goals: List<FlowGoal> = emptyList(),
     val evaluatedGoals: List<EvaluatedGoal> = emptyList(),
     val completedGoalsCount: Int = 0,
@@ -87,14 +79,8 @@ data class FlowUiState(
     val appUsageSnapshot: AppUsageSnapshot = AppUsageSnapshot(),
     val isGoalCreatorOpen: Boolean = false,
     val disabledGoalIds: Set<String> = emptySet(),
-    val inboxTasks: List<TaskItem> = emptyList(),
+    /** Overdue + due today (open) + everything completed today. Drives progress and the widget. */
     val todayTasks: List<TaskItem> = emptyList(),
-    val nextActionTasks: List<TaskItem> = emptyList(),
-    val upcomingWeekDays: List<UpcomingDayGroup> = emptyList(),
-    val laterScheduledTasks: List<TaskItem> = emptyList(),
-    val upcomingWeekTotalCount: Int = 0,
-    val somedayTasks: List<TaskItem> = emptyList(),
-    val projectsWithStats: List<ProjectWithStats> = emptyList(),
     val completedTodayCount: Int = 0,
     val totalTodayTargetCount: Int = 0,
     val isQuickCaptureOpen: Boolean = false,
@@ -110,13 +96,6 @@ data class FlowUiState(
     val contributionChart: ContributionChartSummary = ContributionChartSummary(),
     val activeShieldAlert: AppUsageShieldAlert? = null,
     val shieldAlerts: List<AppUsageShieldAlert> = emptyList(),
-    val focusSession: FocusSessionState = FocusSessionState(),
-    val isFocusSheetOpen: Boolean = false,
-    val selectedContextTag: String? = null,
-    val dailyRitual: DailyRitualState = DailyRitualState(),
-    val rolloverTasks: List<TaskItem> = emptyList(),
-    val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
-    val isMultiTaskDraftOpen: Boolean = false,
     val allCalendarEvents: List<CalendarEventItem> = emptyList(),
     val todayCalendarEvents: List<CalendarEventItem> = emptyList(),
     val selectedCalendarDate: LocalDate = LocalDate.now(),
@@ -138,19 +117,13 @@ class FlowViewModel(
 ) : ViewModel() {
 
     private data class LocalUiFlags(
-        val selectedTab: FlowTab = FlowTab.INBOX,
+        val selectedTab: FlowTab = FlowTab.TASKS,
         val isQuickCaptureOpen: Boolean = false,
         val quickCaptureInitialTitle: String = "",
         val quickCaptureAutoVoice: Boolean = false,
         val isSettingsOpen: Boolean = false,
         val isGoalCreatorOpen: Boolean = false,
         val disabledGoalIds: Set<String> = emptySet(),
-        val focusSession: FocusSessionState = FocusSessionState(),
-        val isFocusSheetOpen: Boolean = false,
-        val selectedContextTag: String? = null,
-        val dailyRitual: DailyRitualState = DailyRitualState(),
-        val pendingMultiTaskDrafts: List<ParsedTaskDraft> = emptyList(),
-        val isMultiTaskDraftOpen: Boolean = false,
         val selectedCalendarDate: LocalDate = LocalDate.now(),
         val isCalendarImporting: Boolean = false,
         val calendarImportMessage: String? = null
@@ -158,7 +131,6 @@ class FlowViewModel(
 
     private data class RepositoryDomainData(
         val tasks: List<TaskItem>,
-        val projects: List<Project>,
         val goals: List<FlowGoal>,
         val dailyHistory: List<DailyCompletionRecord>,
         val calendarEvents: List<CalendarEventItem>,
@@ -209,7 +181,6 @@ class FlowViewModel(
 
     private data class CoreDomainEntities(
         val tasks: List<TaskItem>,
-        val projects: List<Project>,
         val goals: List<FlowGoal>,
         val dailyHistory: List<DailyCompletionRecord>,
         val calendarEvents: List<CalendarEventItem>
@@ -218,18 +189,16 @@ class FlowViewModel(
     private val domainDataFlow: Flow<RepositoryDomainData> = combine(
         combine(
             repository.observeTasks(),
-            repository.observeProjects(),
             repository.observeGoals(),
             repository.observeDailyHistory(),
             repository.observeCalendarEvents()
-        ) { tasks, projects, goals, history, calendarEvents ->
-            CoreDomainEntities(tasks, projects, goals, history, calendarEvents)
+        ) { tasks, goals, history, calendarEvents ->
+            CoreDomainEntities(tasks, goals, history, calendarEvents)
         },
         appUsageSnapshotFlow
     ) { core, usage ->
         RepositoryDomainData(
             tasks = core.tasks,
-            projects = core.projects,
             goals = core.goals,
             dailyHistory = core.dailyHistory,
             calendarEvents = core.calendarEvents,
@@ -262,105 +231,22 @@ class FlowViewModel(
     ) { flags, domainData, accessibility, sysHealth, cloudSync ->
         val today = LocalDate.now()
         val todayEpochDay = today.toEpochDay()
-        val nextWeekEndEpochDay = today.plusDays(7).toEpochDay()
 
         val tasks = domainData.tasks
-        val projects = domainData.projects
         val goals = domainData.goals
         val usage = domainData.appUsage
 
-        val rawInboxTasks = tasks.filter { it.bucket == GtdBucket.INBOX }
-        val inboxTasks = if (flags.selectedContextTag != null) {
-            rawInboxTasks.filter { it.contextTag.equals(flags.selectedContextTag, ignoreCase = true) }
-        } else {
-            rawInboxTasks
-        }
-
-        val rawTodayTasks = tasks.filter { task ->
-            val isDueTodayOrPast = task.dueDateEpochDay != null && task.dueDateEpochDay <= todayEpochDay
-            val isRecurringToday = !task.isCompleted &&
-                task.recurrenceRule?.isRecurring == true &&
-                task.recurrenceRule.occursOnDate(today, task.dueDateEpochDay)
-            val isFlaggedActive = task.isFlagged && !task.isCompleted
-            val isFlaggedCompletedToday = task.isFlagged && task.isCompleted && isCompletedToday(task.completedAt, todayEpochDay)
-            isDueTodayOrPast || isRecurringToday || isFlaggedActive || isFlaggedCompletedToday
-        }
-
-        val todayTasks = if (flags.selectedContextTag != null) {
-            rawTodayTasks.filter { it.contextTag.equals(flags.selectedContextTag, ignoreCase = true) }
-        } else {
-            rawTodayTasks
-        }
-
-        val rolloverTasks = tasks.filter {
-            !it.isCompleted && it.dueDateEpochDay != null && it.dueDateEpochDay < todayEpochDay
-        }
-
-        val todayTaskIds = todayTasks.map { it.id }.toSet()
-        val nextActionTasks = tasks.filter { it.bucket == GtdBucket.NEXT_ACTION && it.id !in todayTaskIds }
-        val somedayTasks = tasks.filter { it.bucket == GtdBucket.SOMEDAY }
-
-        // Build 7-day Upcoming Week Queue (Tomorrow through Today + 7 days)
-        val activeTasks = tasks.filter { !it.isCompleted }
-        val upcomingWeekDays = (1L..7L).map { offset ->
-            val targetDate = today.plusDays(offset)
-            val targetEpoch = targetDate.toEpochDay()
-            val dayName = targetDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            val dayTitle = when (offset) {
-                1L -> "Tomorrow • $dayName"
-                else -> dayName
-            }
-            val dateSubtitle = targetDate.format(dateFormatter)
-
-            val dayTasks = activeTasks.filter { task ->
-                val isExplicitlyDue = task.dueDateEpochDay == targetEpoch
-                val isRecurringMatch = task.recurrenceRule?.isRecurring == true &&
-                    task.recurrenceRule.occursOnDate(targetDate, task.dueDateEpochDay)
-                isExplicitlyDue || isRecurringMatch
-            }.map { task ->
-                if (task.dueDateEpochDay != targetEpoch && task.recurrenceRule?.isRecurring == true) {
-                    task.copy(dueDateEpochDay = targetEpoch)
-                } else {
-                    task
-                }
-            }
-
-            UpcomingDayGroup(
-                epochDay = targetEpoch,
-                dayTitle = dayTitle,
-                dateSubtitle = dateSubtitle,
-                isTomorrow = offset == 1L,
-                tasks = dayTasks
-            )
-        }
-
-        val laterScheduledTasks = activeTasks.filter { task ->
-            task.dueDateEpochDay != null && task.dueDateEpochDay > nextWeekEndEpochDay
-        }.sortedBy { it.dueDateEpochDay }
-
-        val upcomingWeekTotalCount = upcomingWeekDays.sumOf { it.tasks.size }
-
-        val projectsWithStats = projects.map { project ->
-            val projectTasks = tasks.filter { it.projectId == project.id }
-            val completedCount = projectTasks.count { it.isCompleted }
-            ProjectWithStats(
-                project = project,
-                tasks = projectTasks,
-                completedCount = completedCount,
-                totalCount = projectTasks.size
-            )
-        }
+        val taskSections = TaskSections.build(tasks, today)
+        val todayTasks = taskSections.overdue + taskSections.today + taskSections.doneToday
 
         val completedTodayCount = todayTasks.count { it.isCompleted }
         val totalTodayTargetCount = todayTasks.size
 
         // Evaluate first-class Flow goals
-        val projectsMap = projects.associateBy { it.id }
         val evaluatedGoals = goals.map { goal ->
             evaluateGoal(
                 goal = goal,
                 allTasks = tasks,
-                projectsMap = projectsMap,
                 healthSnapshot = sysHealth.healthSnapshot,
                 appUsageSnapshot = usage,
                 todayEpochDay = todayEpochDay
@@ -442,7 +328,7 @@ class FlowViewModel(
         FlowUiState(
             selectedTab = flags.selectedTab,
             allTasks = tasks,
-            projects = projects,
+            taskSections = taskSections,
             goals = goals,
             evaluatedGoals = evaluatedGoals,
             completedGoalsCount = completedGoalsCount,
@@ -451,14 +337,7 @@ class FlowViewModel(
             appUsageSnapshot = usage,
             isGoalCreatorOpen = flags.isGoalCreatorOpen,
             disabledGoalIds = flags.disabledGoalIds,
-            inboxTasks = inboxTasks,
             todayTasks = todayTasks,
-            nextActionTasks = nextActionTasks,
-            upcomingWeekDays = upcomingWeekDays,
-            laterScheduledTasks = laterScheduledTasks,
-            upcomingWeekTotalCount = upcomingWeekTotalCount,
-            somedayTasks = somedayTasks,
-            projectsWithStats = projectsWithStats,
             completedTodayCount = completedTodayCount,
             totalTodayTargetCount = totalTodayTargetCount,
             isQuickCaptureOpen = flags.isQuickCaptureOpen,
@@ -474,13 +353,6 @@ class FlowViewModel(
             contributionChart = contributionChart,
             activeShieldAlert = sysHealth.activeShieldAlert,
             shieldAlerts = sysHealth.shieldAlerts,
-            focusSession = flags.focusSession,
-            isFocusSheetOpen = flags.isFocusSheetOpen,
-            selectedContextTag = flags.selectedContextTag,
-            dailyRitual = flags.dailyRitual,
-            rolloverTasks = rolloverTasks,
-            pendingMultiTaskDrafts = flags.pendingMultiTaskDrafts,
-            isMultiTaskDraftOpen = flags.isMultiTaskDraftOpen,
             allCalendarEvents = calendarEvents,
             todayCalendarEvents = todayCalendarEvents,
             selectedCalendarDate = flags.selectedCalendarDate,
@@ -582,9 +454,11 @@ class FlowViewModel(
 
                 val ctx = appContext
                 if (ctx != null) {
-                    val topUncompleted = state.todayTasks.firstOrNull { !it.isCompleted }
-                        ?: state.nextActionTasks.firstOrNull { !it.isCompleted }
-                        ?: state.inboxTasks.firstOrNull { !it.isCompleted }
+                    val sections = state.taskSections
+                    val topUncompleted = sections.overdue.firstOrNull()
+                        ?: sections.today.firstOrNull()
+                        ?: sections.upcoming.firstOrNull()?.tasks?.firstOrNull()
+                        ?: sections.noDate.firstOrNull()
 
                     val recentLevels = state.contributionChart.cells
                         .filter { !it.isFuture }
@@ -612,7 +486,6 @@ class FlowViewModel(
     private fun evaluateGoal(
         goal: FlowGoal,
         allTasks: List<TaskItem>,
-        projectsMap: Map<String, Project>,
         healthSnapshot: HealthDailySnapshot,
         appUsageSnapshot: AppUsageSnapshot,
         todayEpochDay: Long
@@ -635,7 +508,6 @@ class FlowViewModel(
             GoalCategory.TASK_COMPLETION -> {
                 val matchingCompletedTasks = allTasks.filter { task ->
                     task.isCompleted &&
-                        (goal.projectId == null || task.projectId == goal.projectId) &&
                         when (goal.period) {
                             GoalPeriod.DAILY -> {
                                 (task.completedAt != null && task.completedAt >= startOfTodayMillis) ||
@@ -650,8 +522,7 @@ class FlowViewModel(
                 }
                 currentValue = matchingCompletedTasks.size.toDouble()
                 unitLabel = "tasks"
-                val scopeName = goal.projectId?.let { projectsMap[it]?.name } ?: "All Tasks"
-                subtitle = "${goal.period.label} • $scopeName"
+                subtitle = "${goal.period.label} • All tasks"
             }
             GoalCategory.HEALTH_CONNECT -> {
                 val metric = goal.healthMetric ?: HealthMetricType.STEPS
@@ -995,41 +866,29 @@ class FlowViewModel(
     fun addTask(
         title: String,
         notes: String = "",
-        bucket: GtdBucket = GtdBucket.INBOX,
         dueDateEpochDay: Long? = null,
-        projectId: String? = null,
         isFlagged: Boolean = false,
         recurrenceRule: RecurrenceRule? = null,
         healthGoal: HealthGoalSpec? = null,
-        subtasks: List<SubtaskItem> = emptyList(),
-        contextTag: String? = null
+        subtasks: List<SubtaskItem> = emptyList()
     ) {
         if (title.isBlank()) return
         val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
         val effectiveDueDate = when {
             dueDateEpochDay != null -> dueDateEpochDay
             hasRecurrence -> recurrenceRule!!.firstMatchingOrAfter(LocalDate.now()).toEpochDay()
-            bucket == GtdBucket.SCHEDULED -> LocalDate.now().toEpochDay()
             else -> null
-        }
-        val effectiveBucket = if (hasRecurrence && bucket == GtdBucket.INBOX) {
-            GtdBucket.SCHEDULED
-        } else {
-            bucket
         }
         val newTask = TaskItem(
             id = UUID.randomUUID().toString(),
             title = title.trim(),
             notes = notes.trim(),
-            bucket = effectiveBucket,
             dueDateEpochDay = effectiveDueDate,
-            projectId = projectId,
             isFlagged = isFlagged,
             isCompleted = false,
             recurrenceRule = if (hasRecurrence) recurrenceRule else null,
             healthGoal = healthGoal,
             subtasks = subtasks,
-            contextTag = contextTag,
             createdAt = System.currentTimeMillis(),
             completedAt = null
         )
@@ -1039,189 +898,6 @@ class FlowViewModel(
         }
     }
 
-    // --- Deep Flow Focus Mode & Procedural Ambient Soundscapes ---
-    private val audioSynthesizer = FluidAudioSynthesizer()
-    private var focusTimerJob: Job? = null
-
-    fun startFocusSession(
-        taskId: String? = null,
-        taskTitle: String? = null,
-        durationMinutes: Int = 25,
-        soundscape: AmbientSoundscape = AmbientSoundscape.RAIN_SHOWER
-    ) {
-        val totalSecs = (durationMinutes * 60).coerceAtLeast(60)
-        _localFlags.update { flags ->
-            flags.copy(
-                isFocusSheetOpen = true,
-                focusSession = FocusSessionState(
-                    isActive = true,
-                    isPaused = false,
-                    remainingSeconds = totalSecs,
-                    totalSeconds = totalSecs,
-                    targetTaskId = taskId,
-                    targetTaskTitle = taskTitle,
-                    soundscape = soundscape,
-                    isPlayingAudio = soundscape != AmbientSoundscape.OFF
-                )
-            )
-        }
-        if (soundscape != AmbientSoundscape.OFF) {
-            audioSynthesizer.play(soundscape)
-        }
-        startFocusTimerLoop()
-    }
-
-    private fun startFocusTimerLoop() {
-        focusTimerJob?.cancel()
-        focusTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(1000L)
-                val current = _localFlags.value.focusSession
-                if (!current.isActive || current.isPaused) continue
-
-                val newRemaining = current.remainingSeconds - 1
-                if (newRemaining <= 0) {
-                    _localFlags.update { flags ->
-                        flags.copy(
-                            focusSession = flags.focusSession.copy(
-                                remainingSeconds = 0,
-                                isActive = false,
-                                isPaused = false,
-                                isPlayingAudio = false
-                            )
-                        )
-                    }
-                    audioSynthesizer.stop()
-                    break
-                } else {
-                    _localFlags.update { flags ->
-                        flags.copy(focusSession = flags.focusSession.copy(remainingSeconds = newRemaining))
-                    }
-                }
-            }
-        }
-    }
-
-    fun toggleFocusPlayPause() {
-        val current = _localFlags.value.focusSession
-        if (!current.isActive) {
-            startFocusSession(
-                taskId = current.targetTaskId,
-                taskTitle = current.targetTaskTitle,
-                durationMinutes = current.totalSeconds / 60,
-                soundscape = current.soundscape
-            )
-            return
-        }
-
-        val willPause = !current.isPaused
-        _localFlags.update { flags ->
-            flags.copy(
-                focusSession = flags.focusSession.copy(
-                    isPaused = willPause,
-                    isPlayingAudio = !willPause && current.soundscape != AmbientSoundscape.OFF
-                )
-            )
-        }
-        if (willPause) {
-            audioSynthesizer.stop()
-        } else if (current.soundscape != AmbientSoundscape.OFF) {
-            audioSynthesizer.play(current.soundscape)
-        }
-    }
-
-    fun resetFocusTimer() {
-        val current = _localFlags.value.focusSession
-        _localFlags.update { flags ->
-            flags.copy(
-                focusSession = flags.focusSession.copy(
-                    remainingSeconds = current.totalSeconds,
-                    isPaused = true,
-                    isPlayingAudio = false
-                )
-            )
-        }
-        audioSynthesizer.stop()
-    }
-
-    fun addFiveMinutesToFocus() {
-        _localFlags.update { flags ->
-            val cur = flags.focusSession
-            val added = 5 * 60
-            flags.copy(
-                focusSession = cur.copy(
-                    remainingSeconds = cur.remainingSeconds + added,
-                    totalSeconds = cur.totalSeconds + added
-                )
-            )
-        }
-    }
-
-    fun selectFocusSoundscape(soundscape: AmbientSoundscape) {
-        _localFlags.update { flags ->
-            flags.copy(
-                focusSession = flags.focusSession.copy(
-                    soundscape = soundscape,
-                    isPlayingAudio = soundscape != AmbientSoundscape.OFF && !flags.focusSession.isPaused
-                )
-            )
-        }
-        val isPaused = _localFlags.value.focusSession.isPaused
-        if (!isPaused && soundscape != AmbientSoundscape.OFF) {
-            audioSynthesizer.play(soundscape)
-        } else {
-            audioSynthesizer.stop()
-        }
-    }
-
-    fun setFocusSheetOpen(open: Boolean) {
-        _localFlags.update { it.copy(isFocusSheetOpen = open) }
-    }
-
-    fun closeFocusSession() {
-        focusTimerJob?.cancel()
-        focusTimerJob = null
-        audioSynthesizer.stop()
-        _localFlags.update { flags ->
-            flags.copy(
-                isFocusSheetOpen = false,
-                focusSession = FocusSessionState()
-            )
-        }
-    }
-
-    // --- GTD Context Filters ---
-    fun selectContextFilter(tag: String?) {
-        _localFlags.update { it.copy(selectedContextTag = tag) }
-    }
-
-    // --- Multi-Task Drafts & Batch Creation ---
-    fun setMultiTaskDrafts(drafts: List<ParsedTaskDraft>) {
-        _localFlags.update {
-            it.copy(
-                pendingMultiTaskDrafts = drafts,
-                isMultiTaskDraftOpen = drafts.size > 1
-            )
-        }
-    }
-
-    fun dismissMultiTaskDrafts() {
-        _localFlags.update {
-            it.copy(
-                pendingMultiTaskDrafts = emptyList(),
-                isMultiTaskDraftOpen = false
-            )
-        }
-    }
-
-    fun confirmAddAllMultiTaskDrafts() {
-        val drafts = _localFlags.value.pendingMultiTaskDrafts
-        if (drafts.isNotEmpty()) {
-            addTasksBatch(drafts)
-        }
-        dismissMultiTaskDrafts()
-    }
-
     fun addTasksBatch(drafts: List<ParsedTaskDraft>) {
         viewModelScope.launch {
             val tasks = drafts.map { draft ->
@@ -1229,84 +905,23 @@ class FlowViewModel(
                 val effectiveDueDate = when {
                     draft.dueDateEpochDay != null -> draft.dueDateEpochDay
                     hasRecurrence -> draft.recurrenceRule!!.firstMatchingOrAfter(LocalDate.now()).toEpochDay()
-                    draft.bucket == GtdBucket.SCHEDULED -> LocalDate.now().toEpochDay()
                     else -> null
                 }
                 TaskItem(
                     id = UUID.randomUUID().toString(),
                     title = draft.title.trim(),
                     notes = draft.notes.trim(),
-                    bucket = if (hasRecurrence && draft.bucket == GtdBucket.INBOX) GtdBucket.SCHEDULED else draft.bucket,
                     dueDateEpochDay = effectiveDueDate,
-                    projectId = draft.projectId,
                     isFlagged = draft.isFlagged,
                     isCompleted = false,
                     recurrenceRule = if (hasRecurrence) draft.recurrenceRule else null,
                     healthGoal = draft.healthGoal,
-                    contextTag = draft.contextTag,
                     createdAt = System.currentTimeMillis()
                 )
             }
             repository.upsertTasks(tasks)
             tasks.forEach { firestoreSyncManager?.pushTask(it) }
         }
-    }
-
-    // --- Daily Rituals: Morning & Evening ---
-    fun openMorningRitual() {
-        _localFlags.update { it.copy(dailyRitual = it.dailyRitual.copy(isMorningOpen = true)) }
-    }
-
-    fun openEveningRitual() {
-        _localFlags.update { it.copy(dailyRitual = it.dailyRitual.copy(isEveningOpen = true)) }
-    }
-
-    fun dismissRituals() {
-        _localFlags.update {
-            it.copy(
-                dailyRitual = it.dailyRitual.copy(
-                    isMorningOpen = false,
-                    isEveningOpen = false
-                )
-            )
-        }
-    }
-
-    fun completeMorningRitual(big3TaskIds: Set<String>) {
-        viewModelScope.launch {
-            val tasksToFlag = uiState.value.allTasks.filter { it.id in big3TaskIds && !it.isFlagged }
-            for (t in tasksToFlag) {
-                val updated = t.copy(isFlagged = true)
-                repository.upsertTask(updated)
-                firestoreSyncManager?.pushTask(updated)
-            }
-            _localFlags.update {
-                it.copy(
-                    dailyRitual = it.dailyRitual.copy(
-                        isMorningOpen = false,
-                        top3TaskIds = big3TaskIds,
-                        morningCompletedEpochDay = LocalDate.now().toEpochDay()
-                    )
-                )
-            }
-        }
-    }
-
-    fun completeEveningRitual() {
-        _localFlags.update {
-            it.copy(
-                dailyRitual = it.dailyRitual.copy(
-                    isEveningOpen = false,
-                    eveningCompletedEpochDay = LocalDate.now().toEpochDay()
-                )
-            )
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        focusTimerJob?.cancel()
-        audioSynthesizer.release()
     }
 
     fun toggleSubtaskCompletion(taskId: String, subtaskId: String) {
@@ -1355,7 +970,6 @@ class FlowViewModel(
         addTask(
             title = title,
             notes = "Auto-synced via Health Connect",
-            bucket = GtdBucket.SCHEDULED,
             dueDateEpochDay = todayEpochDay,
             recurrenceRule = recurrence,
             healthGoal = goal
@@ -1421,7 +1035,6 @@ class FlowViewModel(
                 val nextDueEpochDay = rule.nextOccurrenceAfter(anchorDay)
                 val nextOccurrence = task.copy(
                     id = UUID.randomUUID().toString(),
-                    bucket = GtdBucket.SCHEDULED,
                     dueDateEpochDay = nextDueEpochDay,
                     isCompleted = false,
                     subtasks = task.subtasks.map { it.copy(isCompleted = false) },
@@ -1452,36 +1065,9 @@ class FlowViewModel(
         }
     }
 
-    fun updateTaskBucket(taskId: String, bucket: GtdBucket, dueDateEpochDay: Long? = null) {
-        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
-        val effectiveDueDate = if (dueDateEpochDay != null) {
-            dueDateEpochDay
-        } else if (bucket == GtdBucket.SCHEDULED) {
-            task.dueDateEpochDay ?: LocalDate.now().toEpochDay()
-        } else {
-            task.dueDateEpochDay
-        }
-        val updatedTask = task.copy(
-            bucket = bucket,
-            dueDateEpochDay = effectiveDueDate
-        )
-        viewModelScope.launch {
-            repository.upsertTask(updatedTask)
-            firestoreSyncManager?.pushTask(updatedTask)
-        }
-    }
-
     fun assignTaskDate(taskId: String, dueDateEpochDay: Long?) {
         val task = uiState.value.allTasks.find { it.id == taskId } ?: return
-        val updatedBucket = if (dueDateEpochDay != null && task.bucket == GtdBucket.INBOX) {
-            GtdBucket.SCHEDULED
-        } else {
-            task.bucket
-        }
-        val updatedTask = task.copy(
-            dueDateEpochDay = dueDateEpochDay,
-            bucket = updatedBucket
-        )
+        val updatedTask = task.copy(dueDateEpochDay = dueDateEpochDay)
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
             firestoreSyncManager?.pushTask(updatedTask)
@@ -1496,15 +1082,9 @@ class FlowViewModel(
         } else {
             task.dueDateEpochDay
         }
-        val updatedBucket = if (hasRecurrence && task.bucket == GtdBucket.INBOX) {
-            GtdBucket.SCHEDULED
-        } else {
-            task.bucket
-        }
         val updatedTask = task.copy(
             recurrenceRule = if (hasRecurrence) recurrenceRule else null,
-            dueDateEpochDay = nextDue,
-            bucket = updatedBucket
+            dueDateEpochDay = nextDue
         )
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
@@ -1512,9 +1092,11 @@ class FlowViewModel(
         }
     }
 
-    fun assignTaskProject(taskId: String, projectId: String?) {
+    /** Inline edit of a task's title and notes from the task row. */
+    fun updateTaskText(taskId: String, title: String, notes: String) {
         val task = uiState.value.allTasks.find { it.id == taskId } ?: return
-        val updatedTask = task.copy(projectId = projectId)
+        if (title.isBlank()) return
+        val updatedTask = task.copy(title = title.trim(), notes = notes.trim())
         viewModelScope.launch {
             repository.upsertTask(updatedTask)
             firestoreSyncManager?.pushTask(updatedTask)
@@ -1525,27 +1107,6 @@ class FlowViewModel(
         viewModelScope.launch {
             repository.deleteTask(taskId)
             firestoreSyncManager?.deleteRemoteTask(taskId)
-        }
-    }
-
-    fun addProject(name: String, colorHex: Long) {
-        if (name.isBlank()) return
-        val newProject = Project(
-            id = UUID.randomUUID().toString(),
-            name = name.trim(),
-            colorHex = colorHex,
-            createdAt = System.currentTimeMillis()
-        )
-        viewModelScope.launch {
-            repository.upsertProject(newProject)
-            firestoreSyncManager?.pushProject(newProject)
-        }
-    }
-
-    fun deleteProject(projectId: String) {
-        viewModelScope.launch {
-            repository.deleteProject(projectId)
-            firestoreSyncManager?.deleteRemoteProject(projectId)
         }
     }
 

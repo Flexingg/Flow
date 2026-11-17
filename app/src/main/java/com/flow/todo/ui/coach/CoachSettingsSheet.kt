@@ -281,7 +281,7 @@ fun CoachSettingsSheet(
                         controller.updateSettings { it.copy(sources = it.sources.copy(todayTasks = on)) }
                     }
                     Spacer(Modifier.height(6.dp))
-                    ToggleRow("Backlog", "Next actions and inbox items that have been waiting", src.backlogTasks) { on ->
+                    ToggleRow("Backlog", "Undated tasks that have been waiting a while", src.backlogTasks) { on ->
                         controller.updateSettings { it.copy(sources = it.sources.copy(backlogTasks = on)) }
                     }
                     Spacer(Modifier.height(6.dp))

@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -79,13 +80,14 @@ import kotlin.math.roundToInt
  * - Horizontally inset 20.dp, floating 16.dp above navigation bar insets
  * - Left pill island displaying FlowTab items with sliding spring-morphing indicator and swipe support
  * - Bubbly tab icon scaling and bounce offset
- * - Pop-in/pop-out Inbox badge count pill
+ * - Pop-in/pop-out due-today badge on the Tasks tab
  * - Detached 60.dp circular glass '+' Quick-Capture button with breathing halo glow and bubbly press physics
  */
 @Composable
 fun FluidIslandNavBar(
     selectedTab: FlowTab,
-    inboxBadgeCount: Int,
+    /** Overdue + due-today count shown on the Tasks tab. */
+    tasksBadgeCount: Int,
     onTabSelected: (FlowTab) -> Unit,
     onQuickAddClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -241,10 +243,8 @@ fun FluidIslandNavBar(
                             ) {
                                 Box(contentAlignment = Alignment.TopEnd) {
                                     val icon = when (tab) {
-                                        FlowTab.INBOX -> Icons.Rounded.Inbox
-                                        FlowTab.TODAY_NEXT -> Icons.Rounded.WbSunny
+                                        FlowTab.TASKS -> Icons.Rounded.CheckCircle
                                         FlowTab.CALENDAR -> Icons.Rounded.CalendarMonth
-                                        FlowTab.PROJECTS -> Icons.Rounded.Folder
                                         FlowTab.GOALS -> Icons.Rounded.TrackChanges
                                     }
 
@@ -261,9 +261,9 @@ fun FluidIslandNavBar(
                                             .size(20.dp)
                                     )
 
-                                    if (tab == FlowTab.INBOX) {
+                                    if (tab == FlowTab.TASKS) {
                                         this@Column.AnimatedVisibility(
-                                            visible = inboxBadgeCount > 0,
+                                            visible = tasksBadgeCount > 0,
                                             enter = scaleIn(animationSpec = FluidSprings.bubbly(isReducedMotion)) + fadeIn(),
                                             exit = scaleOut() + fadeOut()
                                         ) {
@@ -275,7 +275,7 @@ fun FluidIslandNavBar(
                                                     .padding(horizontal = 4.dp, vertical = 1.dp)
                                             ) {
                                                 Text(
-                                                    text = if (inboxBadgeCount > 99) "99+" else inboxBadgeCount.toString(),
+                                                    text = if (tasksBadgeCount > 99) "99+" else tasksBadgeCount.toString(),
                                                     color = Color.White,
                                                     fontSize = 9.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -287,7 +287,7 @@ fun FluidIslandNavBar(
                                     }
                                 }
 
-                                val label = if (tab == FlowTab.TODAY_NEXT) "Today" else tab.label
+                                val label = tab.label
                                 Text(
                                     text = label,
                                     color = if (isSelected) colors.accent else colors.textSecondary,

@@ -536,7 +536,7 @@ fun FluidWaveSplashOverlay(
             )
         }
 
-        // "Flow" title text and "Living Flow GTD" subtitle softly fade and slide up
+        // "Flow" title text and subtitle softly fade and slide up
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -554,7 +554,7 @@ fun FluidWaveSplashOverlay(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Living Flow GTD",
+                text = "Tasks • Calendar • Goals",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Normal,
                 color = colors.textSecondary,

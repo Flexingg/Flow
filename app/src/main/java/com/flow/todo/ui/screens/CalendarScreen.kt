@@ -153,7 +153,7 @@ fun CalendarScreen(
         }.sortedWith(compareBy({ !it.isAllDay }, { it.startEpochMillis }))
     }
 
-    // Filter GTD tasks due on selected date
+    // Tasks due on the selected date
     val dayTasks = remember(scheduledTasks, selectedDate) {
         val selectedEpoch = selectedDate.toEpochDay()
         scheduledTasks.filter { task ->
@@ -559,7 +559,7 @@ fun CalendarScreen(
             }
         }
 
-        // Associated GTD Tasks Due on this Day
+        // Tasks due on this day
         if (dayTasks.isNotEmpty()) {
             item(key = "scheduled_tasks_header") {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1195,7 +1195,7 @@ fun CalendarImportSheet(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Bring your meetings and schedule into Flow so you can check events off alongside your GTD tasks.",
+                text = "Bring your meetings and schedule into Flow so you can check events off alongside your tasks.",
                 fontSize = 14.sp,
                 color = colors.textSecondary
             )

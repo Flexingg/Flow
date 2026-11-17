@@ -1,6 +1,5 @@
 package com.flow.todo.coach
 
-import com.flow.todo.domain.model.GtdBucket
 import com.flow.todo.domain.model.HealthMetricType
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -33,10 +32,9 @@ class CoachLogicTest {
         id: String,
         due: Long? = day.toEpochDay(),
         done: Boolean = false,
-        bucket: GtdBucket = GtdBucket.SCHEDULED,
         flagged: Boolean = false,
         created: Long = millis(1) - 3 * 86_400_000L
-    ) = CoachTaskInput(id, "Task $id", bucket, due, flagged, done, if (done) millis(10) else null, created)
+    ) = CoachTaskInput(id, "Task $id", due, flagged, done, if (done) millis(10) else null, created)
 
     // ---------- context builder ----------
 
@@ -98,7 +96,7 @@ class CoachLogicTest {
         val ctx = CoachContextBuilder.build(
             input(
                 hour = 11,
-                tasks = listOf(task("a"), task("n", due = null, bucket = GtdBucket.NEXT_ACTION)),
+                tasks = listOf(task("a"), task("n", due = null)),
                 health = mapOf(HealthMetricType.STEPS to 100.0),
                 sources = CoachDataSources(todayTasks = false, backlogTasks = false, health = false, calendar = false, streakAndMomentum = false)
             )
