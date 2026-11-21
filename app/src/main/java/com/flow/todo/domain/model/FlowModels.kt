@@ -8,8 +8,8 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 enum class FlowTab(val label: String) {
-    TASKS("Tasks"),
-    CALENDAR("Calendar"),
+    DAY("Day"),
+    TODO("To-Do"),
     GOALS("Goals")
 }
 

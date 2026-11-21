@@ -243,8 +243,8 @@ fun FluidIslandNavBar(
                             ) {
                                 Box(contentAlignment = Alignment.TopEnd) {
                                     val icon = when (tab) {
-                                        FlowTab.TASKS -> Icons.Rounded.CheckCircle
-                                        FlowTab.CALENDAR -> Icons.Rounded.CalendarMonth
+                                        FlowTab.DAY -> Icons.Rounded.CalendarMonth
+                                        FlowTab.TODO -> Icons.Rounded.CheckCircle
                                         FlowTab.GOALS -> Icons.Rounded.TrackChanges
                                     }
 
@@ -261,7 +261,7 @@ fun FluidIslandNavBar(
                                             .size(20.dp)
                                     )
 
-                                    if (tab == FlowTab.TASKS) {
+                                    if (tab == FlowTab.TODO) {
                                         this@Column.AnimatedVisibility(
                                             visible = tasksBadgeCount > 0,
                                             enter = scaleIn(animationSpec = FluidSprings.bubbly(isReducedMotion)) + fadeIn(),

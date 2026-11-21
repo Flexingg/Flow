@@ -96,6 +96,8 @@ fun QuickCaptureSheet(
     onDismiss: () -> Unit,
     initialTitle: String = "",
     autoStartVoice: Boolean = false,
+    /** Day used when the text doesn't name one (the day selected on the Day screen). */
+    defaultDueEpochDay: Long? = null,
     onSaveTask: (
         title: String,
         notes: String,
@@ -103,7 +105,9 @@ fun QuickCaptureSheet(
         isFlagged: Boolean,
         recurrenceRule: RecurrenceRule?,
         healthGoal: HealthGoalSpec?,
-        subtasks: List<SubtaskItem>
+        subtasks: List<SubtaskItem>,
+        startMinute: Int?,
+        durationMinutes: Int?
     ) -> Unit,
     onBatchAddTasks: (List<ParsedTaskDraft>) -> Unit = {}
 ) {
@@ -120,6 +124,11 @@ fun QuickCaptureSheet(
     var repeat by remember { mutableStateOf(RepeatChoice.FROM_TEXT) }
     var flaggedOverride by remember { mutableStateOf<Boolean?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    /** null = whatever the text says ("at 3pm"); Some(null) = explicitly no time. */
+    var timeChoice by remember { mutableStateOf<Int?>(null) }
+    var timeCleared by remember { mutableStateOf(false) }
+    var durationChoice by remember { mutableStateOf<Int?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     val parsed = remember(title) { NaturalLanguageTaskParser.parse(title, today = today) }
@@ -127,9 +136,11 @@ fun QuickCaptureSheet(
     val isBatch = lines.size > 1
 
     val effectiveDue: Long? = when (val d = due) {
-        DueChoice.FromText -> parsed.dueDateEpochDay
+        DueChoice.FromText -> parsed.dueDateEpochDay ?: defaultDueEpochDay
         is DueChoice.Explicit -> d.epochDay
     }
+    val effectiveStart: Int? = if (timeCleared) null else timeChoice ?: parsed.startMinute
+    val effectiveDuration: Int? = durationChoice ?: parsed.durationMinutes
     val effectiveRepeat: RecurrenceRule? = when (repeat) {
         RepeatChoice.FROM_TEXT -> parsed.recurrenceRule
         RepeatChoice.NONE -> null
@@ -148,7 +159,8 @@ fun QuickCaptureSheet(
             val drafts = NaturalLanguageTaskParser.parseMultiple(title, today = today).map { draft ->
                 // Explicit chips apply to every task in the batch when the line itself didn't say otherwise.
                 draft.copy(
-                    dueDateEpochDay = draft.dueDateEpochDay ?: (due as? DueChoice.Explicit)?.epochDay,
+                    dueDateEpochDay = draft.dueDateEpochDay ?: (due as? DueChoice.Explicit)?.epochDay
+                        ?: (if (due is DueChoice.FromText) defaultDueEpochDay else null),
                     isFlagged = draft.isFlagged || flaggedOverride == true
                 )
             }
@@ -161,7 +173,9 @@ fun QuickCaptureSheet(
                 effectiveFlag,
                 effectiveRepeat,
                 null,
-                parsed.extractedSubtasks.map { SubtaskItem(title = it) }
+                parsed.extractedSubtasks.map { SubtaskItem(title = it) },
+                effectiveStart,
+                if (effectiveStart != null) effectiveDuration else null
             )
         }
         onDismiss()
@@ -236,6 +250,8 @@ fun QuickCaptureSheet(
             val understood = buildList {
                 if (isBatch) add("${lines.size} tasks")
                 if (due is DueChoice.FromText) TaskSections.dueLabel(parsed.dueDateEpochDay, today)?.let { add("📅 $it") }
+                if (timeChoice == null && !timeCleared) parsed.startMinute?.let { add("🕒 ${NaturalLanguageTaskParser.formatClock(it)}") }
+                if (durationChoice == null) parsed.durationMinutes?.let { add("⏱ ${NaturalLanguageTaskParser.formatDuration(it)}") }
                 if (repeat == RepeatChoice.FROM_TEXT) parsed.recurrenceRule?.let { add("🔁 ${it.toDisplayLabel()}") }
                 if (flaggedOverride == null && parsed.isFlagged) add("🚩 Flagged")
                 if (!isBatch && parsed.extractedSubtasks.isNotEmpty()) add("☑ ${parsed.extractedSubtasks.size} subtasks")
@@ -279,6 +295,29 @@ fun QuickCaptureSheet(
                     { showDatePicker = true }
                 )
                 FluidFilterChip("No date", isExplicit && explicit == null, { due = DueChoice.Explicit(null) })
+            }
+
+            // Time block
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FluidFilterChip(
+                    label = effectiveStart?.let { "🕒 ${NaturalLanguageTaskParser.formatClock(it)}" } ?: "🕒 Time",
+                    selected = effectiveStart != null,
+                    onClick = { showTimePicker = true }
+                )
+                if (effectiveStart != null) {
+                    listOf(15, 30, 60, 90).forEach { m ->
+                        FluidFilterChip(
+                            NaturalLanguageTaskParser.formatDuration(m),
+                            (effectiveDuration ?: com.flow.todo.domain.model.TaskItem.DEFAULT_TASK_MINUTES) == m,
+                            { durationChoice = m }
+                        )
+                    }
+                    FluidFilterChip("No time", false, { timeCleared = true; timeChoice = null })
+                }
             }
 
             // Repeat / flag / notes
@@ -330,6 +369,14 @@ fun QuickCaptureSheet(
             }
             Spacer(Modifier.size(4.dp))
         }
+    }
+
+    if (showTimePicker) {
+        com.flow.todo.ui.day.TimePickDialog(
+            initialMinute = effectiveStart ?: ((java.time.LocalTime.now().hour + 1) % 24) * 60,
+            onPick = { m -> timeChoice = m; timeCleared = false; showTimePicker = false },
+            onDismiss = { showTimePicker = false }
+        )
     }
 
     if (showDatePicker) {

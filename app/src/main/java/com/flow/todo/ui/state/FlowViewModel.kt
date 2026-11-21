@@ -71,7 +71,7 @@ val FlowGoal.isEnabled: Boolean
     get() = this.id !in FlowViewModel.globalDisabledGoalIds.value
 
 data class FlowUiState(
-    val selectedTab: FlowTab = FlowTab.TASKS,
+    val selectedTab: FlowTab = FlowTab.DAY,
     val allTasks: List<TaskItem> = emptyList(),
     /** The Tasks screen: overdue / today / upcoming / no date / done today. */
     val taskSections: TaskSections = TaskSections(),
@@ -133,7 +133,7 @@ class FlowViewModel(
 ) : ViewModel() {
 
     private data class LocalUiFlags(
-        val selectedTab: FlowTab = FlowTab.TASKS,
+        val selectedTab: FlowTab = FlowTab.DAY,
         val isQuickCaptureOpen: Boolean = false,
         val quickCaptureInitialTitle: String = "",
         val quickCaptureAutoVoice: Boolean = false,

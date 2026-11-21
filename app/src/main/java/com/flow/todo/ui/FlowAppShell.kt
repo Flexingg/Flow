@@ -55,7 +55,9 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import com.flow.todo.ui.screens.CalendarScreen
+import com.flow.todo.ui.day.DayActions
+import com.flow.todo.ui.day.DayScreen
+import com.flow.todo.ui.todo.ToDoScreen
 import com.flow.todo.coach.data.CoachController
 import com.flow.todo.ui.coach.CoachCard
 import com.flow.todo.ui.coach.CoachSettingsSheet
@@ -63,7 +65,6 @@ import com.flow.todo.ui.screens.FluidSettingsSheet
 import com.flow.todo.ui.screens.GoalCreatorSheet
 import com.flow.todo.ui.screens.GoalsScreen
 import com.flow.todo.ui.screens.QuickCaptureSheet
-import com.flow.todo.ui.screens.TasksScreen
 import com.flow.todo.ui.state.FlowViewModel
 import com.flow.todo.ui.theme.FluidSprings
 import com.flow.todo.ui.theme.FluidTheme
@@ -153,14 +154,31 @@ fun FlowAppShell(
 
     // Separate scroll states per tab so scroll positions are retained during tab navigation
     val tasksListState = rememberLazyListState()
-    val calendarListState = rememberLazyListState()
+    val dayListState = rememberLazyListState()
     val goalsListState = rememberLazyListState()
 
     val currentListState = when (uiState.selectedTab) {
-        FlowTab.TASKS -> tasksListState
-        FlowTab.CALENDAR -> calendarListState
+        FlowTab.DAY -> dayListState
+        FlowTab.TODO -> tasksListState
         FlowTab.GOALS -> goalsListState
     }
+
+    // One-off feedback from calendar writes / imports
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearUserMessage()
+        }
+    }
+    LaunchedEffect(uiState.calendarImportMessage) {
+        val msg = uiState.calendarImportMessage
+        if (msg != null && !uiState.isCalendarImporting) {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearCalendarImportMessage()
+        }
+    }
+    val canReadCalendar = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
+        PackageManager.PERMISSION_GRANTED
 
     // TopBar elevates and morphs when content scrolls beneath it
     val isScrolled by remember {
@@ -170,23 +188,34 @@ fun FlowAppShell(
     }
 
     val (currentTitle, currentSubtitle) = when (uiState.selectedTab) {
-        FlowTab.TASKS -> {
+        FlowTab.DAY -> {
+            val date = uiState.selectedCalendarDate
+            val todayDate = LocalDate.now()
+            val title = when (date) {
+                todayDate -> "Today"
+                todayDate.plusDays(1) -> "Tomorrow"
+                todayDate.minusDays(1) -> "Yesterday"
+                else -> date.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d"))
+            }
+            val timeline = uiState.dayTimeline
+            val events = timeline.timed.count { it.item.kind == com.flow.todo.domain.timeline.TimelineKind.EVENT } + timeline.allDayEvents.size
+            val blocks = timeline.timed.count { it.item.kind == com.flow.todo.domain.timeline.TimelineKind.TASK }
+            val free = timeline.gaps.sumOf { it.durationMinutes }
+            title to buildList {
+                add("$events event${if (events == 1) "" else "s"}")
+                if (blocks > 0) add("$blocks planned")
+                if (timeline.unscheduledTasks.isNotEmpty()) add("${timeline.unscheduledTasks.size} to schedule")
+                if (free > 0) add(com.flow.todo.domain.timeline.DayTimeline.formatGap(free))
+            }.joinToString(" • ")
+        }
+        FlowTab.TODO -> {
             val sections = uiState.taskSections
             val dueNow = sections.overdue.size + sections.today.size
-            "Tasks" to when {
+            "To-Do" to when {
                 sections.overdue.isNotEmpty() -> "${sections.overdue.size} overdue • ${sections.today.size} due today"
                 dueNow > 0 -> "$dueNow due today • ${sections.openCount} open"
                 sections.openCount > 0 -> "Nothing due today • ${sections.openCount} open"
                 else -> "All clear ✨"
-            }
-        }
-        FlowTab.CALENDAR -> {
-            val total = uiState.todayCalendarEvents.size
-            val completed = uiState.todayCalendarEvents.count { it.isCompleted }
-            "Calendar" to if (total > 0) {
-                "$completed of $total events completed today"
-            } else {
-                "Schedule & Agenda • Check events off as you go"
             }
         }
         FlowTab.GOALS -> {
@@ -300,8 +329,39 @@ fun FlowAppShell(
                 modifier = Modifier.fillMaxSize()
             ) { tab ->
                 when (tab) {
-                    FlowTab.TASKS -> TasksScreen(
+                    FlowTab.DAY -> DayScreen(
+                        model = uiState.dayTimeline,
+                        selectedDate = uiState.selectedCalendarDate,
+                        dayMarkers = uiState.dayMarkers,
+                        allTasks = uiState.allTasks,
+                        allEvents = uiState.allCalendarEvents,
+                        writableCalendars = uiState.writableCalendars,
+                        canReadCalendar = canReadCalendar,
+                        actions = DayActions(
+                            onSelectDate = viewModel::selectCalendarDate,
+                            onToggleTask = viewModel::toggleTaskCompletion,
+                            onToggleEvent = viewModel::toggleCalendarEventCompletion,
+                            onToggleStar = viewModel::toggleTaskFlag,
+                            onScheduleTask = viewModel::scheduleTask,
+                            onResizeTask = viewModel::resizeTask,
+                            onRescheduleEvent = viewModel::rescheduleEvent,
+                            onDeleteTask = viewModel::deleteTask,
+                            onDeleteEvent = viewModel::deleteCalendarEvent,
+                            onAddTask = { title, day, start, duration ->
+                                viewModel.addTask(title = title, dueDateEpochDay = day, startMinute = start, durationMinutes = duration)
+                            },
+                            onAddEvent = viewModel::createCalendarEvent,
+                            onConnectCalendar = requestCalendarPermissions,
+                            onImportIcs = {
+                                runCatching { pickIcsLauncher.launch(arrayOf("text/calendar", "*/*")) }
+                            }
+                        ),
+                        contentPadding = screenContentPadding
+                    )
+
+                    FlowTab.TODO -> ToDoScreen(
                         sections = uiState.taskSections,
+                        openTasks = uiState.allTasks.filter { !it.isCompleted },
                         healthSnapshot = uiState.healthSnapshot,
                         completedTodayCount = uiState.completedTodayCount,
                         totalTodayCount = uiState.totalTodayTargetCount,
@@ -314,6 +374,7 @@ fun FlowAppShell(
                         onToggleSubtask = viewModel::toggleSubtaskCompletion,
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
+                        onMoveToQuadrant = viewModel::setTaskQuadrant,
                         onQuickAdd = { viewModel.setQuickCaptureOpen(true) },
                         coachCard = {
                             CoachCard(
@@ -324,28 +385,6 @@ fun FlowAppShell(
                         },
                         contentPadding = screenContentPadding,
                         listState = tasksListState
-                    )
-
-                    FlowTab.CALENDAR -> CalendarScreen(
-                        calendarEvents = uiState.allCalendarEvents,
-                        scheduledTasks = uiState.allTasks,
-                        selectedDate = uiState.selectedCalendarDate,
-                        dailySummary = uiState.calendarDailySummary,
-                        dailyProgress = uiState.dailyProgress,
-                        isImporting = uiState.isCalendarImporting,
-                        importMessage = uiState.calendarImportMessage,
-                        onSelectDate = viewModel::selectCalendarDate,
-                        onToggleEventCompletion = viewModel::toggleCalendarEventCompletion,
-                        onToggleTaskCompletion = viewModel::toggleTaskCompletion,
-                        onImportDeviceCalendars = requestCalendarPermissions,
-                        onPickIcsFile = {
-                            runCatching {
-                                pickIcsLauncher.launch(arrayOf("text/calendar", "*/*"))
-                            }
-                        },
-                        onClearImportMessage = viewModel::clearCalendarImportMessage,
-                        contentPadding = screenContentPadding,
-                        listState = calendarListState
                     )
 
                     FlowTab.GOALS -> GoalsScreen(
@@ -438,13 +477,15 @@ fun FlowAppShell(
         if (uiState.isQuickCaptureOpen) {
             var captureSaved by remember { mutableStateOf(false) }
             QuickCaptureSheet(
+                // On the Day tab, new tasks land on the day you're looking at.
+                defaultDueEpochDay = if (uiState.selectedTab == FlowTab.DAY) uiState.selectedCalendarDate.toEpochDay() else null,
                 initialTitle = uiState.quickCaptureInitialTitle,
                 autoStartVoice = uiState.quickCaptureAutoVoice,
                 onDismiss = {
                     viewModel.setQuickCaptureOpen(false)
                     onQuickCaptureClosed(captureSaved)
                 },
-                onSaveTask = { title, notes, dueDateEpochDay, isFlagged, recurrenceRule, healthGoal, subtasks ->
+                onSaveTask = { title, notes, dueDateEpochDay, isFlagged, recurrenceRule, healthGoal, subtasks, startMinute, durationMinutes ->
                     captureSaved = true
                     viewModel.addTask(
                         title = title,
@@ -453,7 +494,9 @@ fun FlowAppShell(
                         isFlagged = isFlagged,
                         recurrenceRule = recurrenceRule,
                         healthGoal = healthGoal,
-                        subtasks = subtasks
+                        subtasks = subtasks,
+                        startMinute = startMinute,
+                        durationMinutes = durationMinutes
                     )
                 },
                 onBatchAddTasks = { drafts ->

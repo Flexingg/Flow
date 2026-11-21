@@ -1,6 +1,6 @@
-# Flow: a lightweight tasks, calendar & goals app for Android
+# Flow: a calendar-first day planner with a strong to-do list
 
-**Flow** is a fast, lightweight to-do, calendar and goals app for Android built with **Kotlin** and **Jetpack Compose**, designed in **OPPO's ColorOS 17 "Living Flow / Fluid Design"** language.
+**Flow** is a calendar-first day planner with a built-in to-do list for Android built with **Kotlin** and **Jetpack Compose**, designed in **OPPO's ColorOS 17 "Living Flow / Fluid Design"** language.
 
 ## Highlights
 
@@ -8,11 +8,13 @@
   - **Luminous Effect**: Restrained frosted glass (`glass.thin`, `glass.regular`, `glass.thick`), vertical gradient **Contour Glow** inner strokes, **Touch Glow** pointer-following highlights, and **Progressive Blur** ramps under floating bars.
   - **Fluid Motion**: Floating glass island navigation bar with horizontal drag-to-switch-tabs, spring-morphing inner indicator pill, and a detached circular glass `+` Quick-Capture button.
   - **Flexible Feedback**: Velocity-aware spring compression (`spring.press`), rubber-band drag stretching, and rebound (`spring.release`) paired with tactile haptics.
-- **Lightweight tasks**:
-  - **Tasks** tab organized purely by due date: Overdue, Today, Upcoming (by day), No date, and Done today.
-  - **Quick Capture** with smart text: "pay rent friday", "gym every monday", "call mom tomorrow !flag", "pack // passport // charger" (subtasks). Paste or dictate several lines to add several tasks at once.
-  - Flags, subtasks, repeats, and health-linked tasks; long-press menu for Today / Tomorrow / Remove date / Edit.
-  - **Calendar** tab with device-calendar and .ics import and event check-offs; **Goals** tab for task, Health Connect and app-usage goals.
+- **Day (home)**: week strip (swipe between weeks, tap the month for a month view), all-day chips, and an hourly **timeline** with a live now line.
+  - Events and time-blocked tasks side by side (overlaps get lanes); **free time** between them is labeled ("1h 30m free"); tap it to add a task, add a calendar event, or drop in an existing to-do.
+  - **Long-press a block to move it** (15-minute snaps), **drag its bottom edge to resize**, and **long-press a to-do in the "To schedule" tray and drop it on the timeline** to time-block it.
+  - **Two-way calendar sync** through Android's calendar provider: moving, resizing, adding or deleting events writes to Google Calendar (and other synced accounts); changes made there show up live. Repeating events are read-only here.
+- **To-Do**: the due-date list (Overdue, Today, Upcoming, No date, Done today) or an **Eisenhower matrix** (★ = important; urgent = due by tomorrow unless moved).
+- **Quick Capture** with smart text: "dentist friday at 3:30pm for 45 min", "gym every monday", "call mom tomorrow !flag", "pack // passport // charger". Time and length chips, and multi-line batches.
+- **Goals** (tasks, Health Connect, app-usage limits), the **AI Coach**, system color sync, and three widgets including a **mini day timeline**.
 - **Accessibility Guardrails**:
   - Built-in toggles in the Settings sheet for **Reduce Transparency** (calm opaque surfaces), **Reduce Motion** (`150ms` cross-fades), **Increased Contrast** (`1.5dp` strokes, $\ge 92\%$ opacity), and **Light Flow / Dark OLED** modes.
 

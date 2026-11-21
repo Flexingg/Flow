@@ -27,6 +27,5 @@
     <string name="coach_widget_refresh">Get a new coach message</string>
     <string name="coach_widget_description">Your AI coach persona tells you what you are doing well and what to work on next</string>
     <string name="calendar_widget_label">Flow Calendar</string>
-    <string name="calendar_widget_check">Check off this item</string>
-    <string name="calendar_widget_description">Today\'s agenda: calendar events and due tasks you can check off from the home screen</string>
+        <string name="calendar_widget_description">Your day as a mini timeline: events, planned tasks, free time and a live now line</string>
 </resources>
