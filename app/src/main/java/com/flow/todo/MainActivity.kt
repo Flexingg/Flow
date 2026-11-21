@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flow.todo.coach.data.CoachController
 import com.flow.todo.data.calendar.CalendarImportManager
+import com.flow.todo.data.calendar.DeviceCalendarSync
 import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.local.FlowDatabase
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
         val appUsageShieldMonitor = AppUsageShieldMonitor(applicationContext)
         firestoreSyncManager = FirestoreSyncManager(applicationContext, repository)
         val calendarImportManager = CalendarImportManager(applicationContext, repository)
+        val deviceCalendarSync = DeviceCalendarSync(applicationContext, repository, calendarImportManager)
 
         viewModel = ViewModelProvider(
             this,
@@ -69,7 +71,8 @@ class MainActivity : ComponentActivity() {
                 appUsageShieldMonitor = appUsageShieldMonitor,
                 firestoreSyncManager = firestoreSyncManager,
                 appContext = applicationContext,
-                calendarImportManager = calendarImportManager
+                calendarImportManager = calendarImportManager,
+                deviceCalendarSync = deviceCalendarSync
             )
         )[FlowViewModel::class.java]
 

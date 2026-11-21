@@ -807,7 +807,10 @@ class FirestoreSyncManager(
             "healthGoalRaw" to task.healthGoal?.toStorageString(),
             "subtasksRaw" to com.flow.todo.domain.model.SubtaskItem.listToStorageString(task.subtasks),
             "createdAt" to task.createdAt,
-            "completedAt" to task.completedAt
+            "completedAt" to task.completedAt,
+            "startMinute" to task.startMinute,
+            "durationMinutes" to task.durationMinutes,
+            "urgentOverride" to task.urgentOverride
         )
 
         fun mapToTask(data: Map<String, Any?>, docId: String): TaskItem {
@@ -834,7 +837,10 @@ class FirestoreSyncManager(
                 healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
                 subtasks = com.flow.todo.domain.model.SubtaskItem.listFromStorageString(subtasksRaw),
                 createdAt = createdAt,
-                completedAt = completedAt
+                completedAt = completedAt,
+                startMinute = (data["startMinute"] as? Number)?.toInt(),
+                durationMinutes = (data["durationMinutes"] as? Number)?.toInt(),
+                urgentOverride = data["urgentOverride"] as? Boolean
             )
         }
 

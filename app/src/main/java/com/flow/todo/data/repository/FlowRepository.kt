@@ -157,6 +157,11 @@ class FlowRepository(
         dao.deleteCalendarEvent(eventId)
     }
 
+    /** Atomically swaps every event of [source] for [events]. */
+    suspend fun replaceCalendarEventsForSource(source: String, events: List<CalendarEventItem>) {
+        dao.replaceCalendarEventsForSource(source, events.map { it.toEntity() })
+    }
+
     suspend fun clearCalendarEventsBySource(source: String) {
         dao.clearCalendarEventsBySource(source)
     }

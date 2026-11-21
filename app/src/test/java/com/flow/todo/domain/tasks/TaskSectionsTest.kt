@@ -70,4 +70,28 @@ class TaskSectionsTest {
         assertEquals("pay rent", rent.cleanedTitle)
         assertEquals(t + 3, rent.dueDateEpochDay)
     }
+
+    @Test fun parserExtractsTimeAndDuration() {
+        val p = NaturalLanguageTaskParser.parse("dentist friday at 3:30pm for 45 min", today = today)
+        assertEquals("dentist", p.cleanedTitle)
+        assertEquals(t + 3, p.dueDateEpochDay)
+        assertEquals(15 * 60 + 30, p.startMinute)
+        assertEquals(45, p.durationMinutes)
+
+        val bare = NaturalLanguageTaskParser.parse("call bob at 3", today = today)
+        assertEquals(15 * 60, bare.startMinute)
+        assertEquals(t, bare.dueDateEpochDay) // a time alone means today
+        assertEquals(9 * 60, NaturalLanguageTaskParser.parse("standup at 9am", today = today).startMinute)
+        assertEquals(0, NaturalLanguageTaskParser.parse("x at 12am", today = today).startMinute)
+        assertEquals(90, NaturalLanguageTaskParser.parse("deep work for 1.5h", today = today).durationMinutes)
+        assertNull(NaturalLanguageTaskParser.parse("buy 3 apples", today = today).startMinute)
+    }
+
+    @Test fun urgencyIsAutomaticUnlessOverridden() {
+        assertTrue(task("a", t + 1).isUrgent(t))
+        assertTrue(!task("b", t + 5).isUrgent(t))
+        assertTrue(!task("c", null).isUrgent(t))
+        assertTrue(task("d", null).copy(urgentOverride = true).isUrgent(t))
+        assertTrue(!task("e", t).copy(urgentOverride = false).isUrgent(t))
+    }
 }

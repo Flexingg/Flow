@@ -111,6 +111,7 @@ class CalendarImportManager(
             .associateBy { it.id }
 
         val imported = mutableListOf<CalendarEventItem>()
+        var querySucceeded = false
 
         runCatching {
             context.contentResolver.query(
@@ -131,6 +132,7 @@ class CalendarImportManager(
                 val calNameIdx = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
                 val calColorIdx = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_COLOR)
                 val accountIdx = cursor.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
+                querySucceeded = true
 
                 while (cursor.moveToNext()) {
                     val rawEventId = if (eventIdIdx >= 0) cursor.getLong(eventIdIdx) else 0L
@@ -171,8 +173,10 @@ class CalendarImportManager(
             }
         }
 
-        if (imported.isNotEmpty()) {
-            repository.upsertCalendarEvents(imported)
+        // Mirror the phone calendar: events moved or deleted in Google Calendar must not linger as
+        // stale copies, so the DEVICE snapshot is replaced (completion ticks are carried over by id).
+        if (querySucceeded) {
+            repository.replaceCalendarEventsForSource(DeviceCalendarSync.SOURCE_DEVICE, imported)
         }
         imported.size
     }

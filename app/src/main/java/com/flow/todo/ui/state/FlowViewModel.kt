@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.flow.todo.data.calendar.CalendarImportManager
+import com.flow.todo.data.calendar.DeviceCalendarSync
+import com.flow.todo.domain.model.DeviceCalendarInfo
+import com.flow.todo.domain.timeline.DayTimeline
+import com.flow.todo.domain.timeline.DayTimelineModel
 import com.flow.todo.data.cloud.FirestoreSyncManager
 import com.flow.todo.data.health.HealthConnectManager
 import com.flow.todo.data.repository.FlowRepository
@@ -102,8 +106,19 @@ data class FlowUiState(
     val selectedDateCalendarEvents: List<CalendarEventItem> = emptyList(),
     val calendarDailySummary: CalendarDailySummary = CalendarDailySummary(epochDay = LocalDate.now().toEpochDay()),
     val isCalendarImporting: Boolean = false,
-    val calendarImportMessage: String? = null
+    val calendarImportMessage: String? = null,
+    /** Day screen: the selected day's timeline (events + time-blocked tasks + free gaps + tray). */
+    val dayTimeline: DayTimelineModel = DayTimeline.build(LocalDate.now().toEpochDay(), emptyList(), emptyList(), System.currentTimeMillis()),
+    /** Per-day dots for the week strip and month view. */
+    val dayMarkers: Map<Long, DayMarker> = emptyMap(),
+    /** Google / device calendars Flow can write new events into. */
+    val writableCalendars: List<DeviceCalendarInfo> = emptyList(),
+    val canWriteCalendar: Boolean = false,
+    /** One-off feedback ("Repeating event: change it in Google Calendar"). */
+    val userMessage: String? = null
 )
+
+data class DayMarker(val eventCount: Int = 0, val openTaskCount: Int = 0)
 
 class FlowViewModel(
     private val repository: FlowRepository,
@@ -113,7 +128,8 @@ class FlowViewModel(
     private val firestoreSyncManager: FirestoreSyncManager? = null,
     private val appUsageShieldMonitor: AppUsageShieldMonitor? = null,
     private val appContext: android.content.Context? = null,
-    private val calendarImportManager: CalendarImportManager? = null
+    private val calendarImportManager: CalendarImportManager? = null,
+    private val deviceCalendarSync: DeviceCalendarSync? = null
 ) : ViewModel() {
 
     private data class LocalUiFlags(
@@ -126,7 +142,11 @@ class FlowViewModel(
         val disabledGoalIds: Set<String> = emptySet(),
         val selectedCalendarDate: LocalDate = LocalDate.now(),
         val isCalendarImporting: Boolean = false,
-        val calendarImportMessage: String? = null
+        val calendarImportMessage: String? = null,
+        val writableCalendars: List<DeviceCalendarInfo> = emptyList(),
+        val userMessage: String? = null,
+        /** Bumped every minute so the now line / free gaps move. */
+        val clockTick: Long = 0L
     )
 
     private data class RepositoryDomainData(
@@ -359,7 +379,18 @@ class FlowViewModel(
             selectedDateCalendarEvents = selectedDateCalendarEvents,
             calendarDailySummary = calendarDailySummary,
             isCalendarImporting = flags.isCalendarImporting,
-            calendarImportMessage = flags.calendarImportMessage
+            calendarImportMessage = flags.calendarImportMessage,
+            dayTimeline = DayTimeline.build(
+                epochDay = flags.selectedCalendarDate.toEpochDay(),
+                events = calendarEvents,
+                tasks = tasks,
+                nowMillis = System.currentTimeMillis(),
+                zone = zone
+            ),
+            dayMarkers = buildDayMarkers(calendarEvents, tasks, zone),
+            writableCalendars = flags.writableCalendars,
+            canWriteCalendar = deviceCalendarSync?.canWrite() == true,
+            userMessage = flags.userMessage
         )
     }.stateIn(
         scope = viewModelScope,
@@ -367,9 +398,22 @@ class FlowViewModel(
         initialValue = FlowUiState()
     )
 
+    private var unregisterCalendarObserver: (() -> Unit)? = null
+
     init {
         viewModelScope.launch {
             refreshHealthAndSystemStatus()
+        }
+
+        // Two-way calendar: mirror the phone calendar now and whenever it changes (Google syncs edits in).
+        startCalendarMirror()
+
+        // Move the now line and free-time gaps along with the clock.
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000L - (System.currentTimeMillis() % 60_000L))
+                _localFlags.update { it.copy(clockTick = it.clockTick + 1) }
+            }
         }
 
         // System color sync is debounced and rate-limited: every change re-themes the whole OS (and
@@ -870,7 +914,9 @@ class FlowViewModel(
         isFlagged: Boolean = false,
         recurrenceRule: RecurrenceRule? = null,
         healthGoal: HealthGoalSpec? = null,
-        subtasks: List<SubtaskItem> = emptyList()
+        subtasks: List<SubtaskItem> = emptyList(),
+        startMinute: Int? = null,
+        durationMinutes: Int? = null
     ) {
         if (title.isBlank()) return
         val hasRecurrence = recurrenceRule != null && recurrenceRule.isRecurring
@@ -890,8 +936,11 @@ class FlowViewModel(
             healthGoal = healthGoal,
             subtasks = subtasks,
             createdAt = System.currentTimeMillis(),
-            completedAt = null
-        )
+            completedAt = null,
+            // A time only makes sense with a day; default to today.
+            startMinute = startMinute,
+            durationMinutes = durationMinutes
+        ).let { if (it.startMinute != null && it.dueDateEpochDay == null) it.copy(dueDateEpochDay = LocalDate.now().toEpochDay()) else it }
         viewModelScope.launch {
             repository.upsertTask(newTask)
             firestoreSyncManager?.pushTask(newTask)
@@ -916,6 +965,8 @@ class FlowViewModel(
                     isCompleted = false,
                     recurrenceRule = if (hasRecurrence) draft.recurrenceRule else null,
                     healthGoal = draft.healthGoal,
+                    startMinute = draft.startMinute,
+                    durationMinutes = draft.durationMinutes,
                     createdAt = System.currentTimeMillis()
                 )
             }
@@ -1167,6 +1218,7 @@ class FlowViewModel(
         viewModelScope.launch {
             _localFlags.update { it.copy(isCalendarImporting = true, calendarImportMessage = "Syncing device calendars...") }
             val count = manager.importDeviceCalendarEvents()
+            startCalendarMirror()
             _localFlags.update {
                 it.copy(
                     isCalendarImporting = false,
@@ -1204,6 +1256,120 @@ class FlowViewModel(
         }
     }
 
+    // ---------------------------------------------------------------- Day timeline / two-way calendar
+
+    private fun startCalendarMirror() {
+        val sync = deviceCalendarSync ?: return
+        if (!sync.canRead()) return
+        unregisterCalendarObserver?.invoke()
+        unregisterCalendarObserver = sync.observeChanges { viewModelScope.launch { sync.refresh() } }
+        viewModelScope.launch {
+            sync.refresh()
+            loadWritableCalendars()
+        }
+    }
+
+    /** Call after the calendar permission is granted. */
+    fun onCalendarPermissionChanged() = startCalendarMirror()
+
+    fun loadWritableCalendars() {
+        val sync = deviceCalendarSync ?: return
+        viewModelScope.launch {
+            val cals = sync.writableCalendars()
+            _localFlags.update { it.copy(writableCalendars = cals) }
+        }
+    }
+
+    fun clearUserMessage() {
+        _localFlags.update { it.copy(userMessage = null) }
+    }
+
+    private fun showMessage(message: String) {
+        _localFlags.update { it.copy(userMessage = message) }
+    }
+
+    /** Puts a task on the timeline (or moves it). [startMinute] null = keep the day, drop the time. */
+    fun scheduleTask(taskId: String, epochDay: Long, startMinute: Int?, durationMinutes: Int? = null) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val updated = task.copy(
+            dueDateEpochDay = epochDay,
+            startMinute = startMinute?.let { DayTimeline.clampStart(it, durationMinutes ?: task.effectiveDurationMinutes) },
+            durationMinutes = durationMinutes ?: task.durationMinutes
+        )
+        viewModelScope.launch {
+            repository.upsertTask(updated)
+            firestoreSyncManager?.pushTask(updated)
+        }
+    }
+
+    fun resizeTask(taskId: String, durationMinutes: Int) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val updated = task.copy(durationMinutes = durationMinutes.coerceIn(15, 16 * 60))
+        viewModelScope.launch {
+            repository.upsertTask(updated)
+            firestoreSyncManager?.pushTask(updated)
+        }
+    }
+
+    /** Eisenhower quadrant: important = starred, urgent = explicit override. */
+    fun setTaskQuadrant(taskId: String, important: Boolean, urgent: Boolean) {
+        val task = uiState.value.allTasks.find { it.id == taskId } ?: return
+        val updated = task.copy(isFlagged = important, urgentOverride = urgent)
+        viewModelScope.launch {
+            repository.upsertTask(updated)
+            firestoreSyncManager?.pushTask(updated)
+        }
+    }
+
+    /** Moves/resizes a calendar event; writes through to Google Calendar for synced calendars. */
+    fun rescheduleEvent(eventId: String, epochDay: Long, startMinute: Int, endMinute: Int) {
+        val sync = deviceCalendarSync ?: return
+        viewModelScope.launch {
+            val event = repository.getAllCalendarEvents().firstOrNull { it.id == eventId } ?: return@launch
+            val zone = ZoneId.systemDefault()
+            val dayStart = LocalDate.ofEpochDay(epochDay).atStartOfDay(zone).toInstant().toEpochMilli()
+            val result = sync.reschedule(event, dayStart + startMinute * 60_000L, dayStart + endMinute * 60_000L)
+            if (result is DeviceCalendarSync.WriteResult.Refused) showMessage(result.reason)
+        }
+    }
+
+    fun createCalendarEvent(calendarId: Long, title: String, epochDay: Long, startMinute: Int, durationMinutes: Int) {
+        val sync = deviceCalendarSync ?: return
+        viewModelScope.launch {
+            val zone = ZoneId.systemDefault()
+            val dayStart = LocalDate.ofEpochDay(epochDay).atStartOfDay(zone).toInstant().toEpochMilli()
+            val start = dayStart + startMinute * 60_000L
+            val result = sync.create(calendarId, title, start, start + durationMinutes * 60_000L)
+            showMessage(if (result is DeviceCalendarSync.WriteResult.Refused) result.reason else "Event added to your calendar")
+        }
+    }
+
+    fun deleteCalendarEvent(eventId: String) {
+        val sync = deviceCalendarSync ?: return
+        viewModelScope.launch {
+            val event = repository.getAllCalendarEvents().firstOrNull { it.id == eventId } ?: return@launch
+            val result = sync.delete(event)
+            if (result is DeviceCalendarSync.WriteResult.Refused) showMessage(result.reason)
+        }
+    }
+
+    private fun buildDayMarkers(events: List<CalendarEventItem>, tasks: List<TaskItem>, zone: ZoneId): Map<Long, DayMarker> {
+        val eventsByDay = HashMap<Long, Int>()
+        for (e in events) {
+            val first = Instant.ofEpochMilli(e.startEpochMillis).atZone(zone).toLocalDate().toEpochDay()
+            val lastMillis = if (e.endEpochMillis > e.startEpochMillis) e.endEpochMillis - 1 else e.startEpochMillis
+            val last = Instant.ofEpochMilli(lastMillis).atZone(zone).toLocalDate().toEpochDay().coerceAtMost(first + 31)
+            for (d in first..last) eventsByDay[d] = (eventsByDay[d] ?: 0) + 1
+        }
+        val tasksByDay = tasks.filter { !it.isCompleted && it.dueDateEpochDay != null }.groupingBy { it.dueDateEpochDay!! }.eachCount()
+        return (eventsByDay.keys + tasksByDay.keys).associateWith { DayMarker(eventsByDay[it] ?: 0, tasksByDay[it] ?: 0) }
+    }
+
+    override fun onCleared() {
+        unregisterCalendarObserver?.invoke()
+        super.onCleared()
+    }
+
     fun clearCalendarImportMessage() {
         _localFlags.update { it.copy(calendarImportMessage = null) }
     }
@@ -1234,7 +1400,8 @@ class FlowViewModel(
             firestoreSyncManager: FirestoreSyncManager? = null,
             appUsageShieldMonitor: AppUsageShieldMonitor? = null,
             appContext: android.content.Context? = null,
-            calendarImportManager: CalendarImportManager? = null
+            calendarImportManager: CalendarImportManager? = null,
+            deviceCalendarSync: DeviceCalendarSync? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1248,7 +1415,8 @@ class FlowViewModel(
                             firestoreSyncManager = firestoreSyncManager,
                             appUsageShieldMonitor = appUsageShieldMonitor,
                             appContext = appContext,
-                            calendarImportManager = calendarImportManager
+                            calendarImportManager = calendarImportManager,
+                            deviceCalendarSync = deviceCalendarSync
                         ) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

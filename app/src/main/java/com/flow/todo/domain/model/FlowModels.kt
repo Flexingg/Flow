@@ -422,14 +422,35 @@ data class TaskItem(
     val title: String,
     val notes: String = "",
     val dueDateEpochDay: Long? = null,
+    /** Starred / important (the Eisenhower "important" axis). */
     val isFlagged: Boolean = false,
     val isCompleted: Boolean = false,
     val recurrenceRule: RecurrenceRule? = null,
     val healthGoal: HealthGoalSpec? = null,
     val subtasks: List<SubtaskItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    /** Minutes after midnight on [dueDateEpochDay]; null = all-day / unscheduled time. */
+    val startMinute: Int? = null,
+    /** Length of the time block; null = default block length. */
+    val durationMinutes: Int? = null,
+    /** Eisenhower "urgent" axis: null = automatic (urgent when overdue or due today/tomorrow). */
+    val urgentOverride: Boolean? = null
 ) {
+    /** True when the task sits on the timeline (has a day and a start time). */
+    val isTimeBlocked: Boolean
+        get() = dueDateEpochDay != null && startMinute != null
+
+    val effectiveDurationMinutes: Int
+        get() = (durationMinutes ?: DEFAULT_TASK_MINUTES).coerceIn(5, 24 * 60)
+
+    fun isUrgent(todayEpochDay: Long): Boolean =
+        urgentOverride ?: (dueDateEpochDay != null && dueDateEpochDay <= todayEpochDay + 1)
+
+    companion object {
+        const val DEFAULT_TASK_MINUTES = 30
+    }
+
     val completedSubtasksCount: Int
         get() = subtasks.count { it.isCompleted }
 
@@ -450,7 +471,9 @@ data class ParsedTaskDraft(
     val dueDateEpochDay: Long? = null,
     val isFlagged: Boolean = false,
     val recurrenceRule: RecurrenceRule? = null,
-    val healthGoal: HealthGoalSpec? = null
+    val healthGoal: HealthGoalSpec? = null,
+    val startMinute: Int? = null,
+    val durationMinutes: Int? = null
 )
 
 data class ParsedTaskSuggestion(
@@ -460,10 +483,15 @@ data class ParsedTaskSuggestion(
     val isFlagged: Boolean = false,
     val recurrenceRule: RecurrenceRule? = null,
     val extractedSubtasks: List<String> = emptyList(),
-    val detectedTokens: List<String> = emptyList()
+    val detectedTokens: List<String> = emptyList(),
+    /** "at 3pm" -> 900 */
+    val startMinute: Int? = null,
+    /** "for 45 min" / "for 1.5h" -> 45 / 90 */
+    val durationMinutes: Int? = null
 ) {
     val hasAnyDetection: Boolean
-        get() = dueDateEpochDay != null || isFlagged || recurrenceRule != null || extractedSubtasks.isNotEmpty()
+        get() = dueDateEpochDay != null || isFlagged || recurrenceRule != null || extractedSubtasks.isNotEmpty() ||
+            startMinute != null || durationMinutes != null
 }
 
 enum class ShieldSeverity(val label: String) {

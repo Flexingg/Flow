@@ -49,7 +49,12 @@ data class TaskEntity(
     val subtasksRaw: String? = null,
     val contextTag: String? = null,
     val createdAt: Long,
-    val completedAt: Long?
+    val completedAt: Long?,
+    // Added in DB v10 (MIGRATION_9_10): time blocks + Eisenhower urgency.
+    val startMinute: Int? = null,
+    val durationMinutes: Int? = null,
+    /** null = automatic, 0 = not urgent, 1 = urgent */
+    val urgency: Int? = null
 )
 
 @Entity(
@@ -134,7 +139,10 @@ fun TaskEntity.toDomain(): TaskItem = TaskItem(
     healthGoal = HealthGoalSpec.fromStorageString(healthGoalRaw),
     subtasks = SubtaskItem.listFromStorageString(subtasksRaw),
     createdAt = createdAt,
-    completedAt = completedAt
+    completedAt = completedAt,
+    startMinute = startMinute,
+    durationMinutes = durationMinutes,
+    urgentOverride = urgency?.let { it == 1 }
 )
 
 /**
@@ -155,7 +163,10 @@ fun TaskItem.toEntity(): TaskEntity = TaskEntity(
     subtasksRaw = SubtaskItem.listToStorageString(subtasks),
     contextTag = null,
     createdAt = createdAt,
-    completedAt = completedAt
+    completedAt = completedAt,
+    startMinute = startMinute,
+    durationMinutes = durationMinutes,
+    urgency = urgentOverride?.let { if (it) 1 else 0 }
 )
 
 /** Written to the unused legacy bucket column. */

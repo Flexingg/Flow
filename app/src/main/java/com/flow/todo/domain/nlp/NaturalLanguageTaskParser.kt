@@ -33,7 +33,8 @@ object NaturalLanguageTaskParser {
     private val weekdayDueRegex = Regex(
         """(?i)\b(on\s+|next\s+|this\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"""
     )
-    private val timeSuffixRegex = Regex("""(?i)\bat\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b""")
+    private val timeSuffixRegex = Regex("""(?i)\b(?:at|@)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?\b""")
+    private val durationRegex = Regex("""(?i)\bfor\s+(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)\b""")
     private val checklistLineRegex = Regex("""^\s*(?:[-*]\s*\[\s*\]|\[\s*\]|[-*])\s+(.+)$""")
 
     fun parse(
@@ -228,9 +229,23 @@ object NaturalLanguageTaskParser {
         }
 
         // Optional time suffix ("at 5pm", "at 14:30")
+        var startMinute: Int? = null
+        var durationMinutes: Int? = null
+        val durationMatch = durationRegex.find(workingTitle)
+        if (durationMatch != null) {
+            val amount = durationMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+            val isHours = durationMatch.groupValues[2].lowercase(Locale.US).startsWith("h")
+            durationMinutes = (if (isHours) amount * 60 else amount).toInt().coerceIn(5, 16 * 60)
+            detectedTokens.add("⏱ ${formatDuration(durationMinutes)}")
+            workingTitle = workingTitle.removeRange(durationMatch.range)
+        }
+
         val timeMatch = timeSuffixRegex.find(workingTitle)
         if (timeMatch != null) {
-            val timeStr = timeMatch.groupValues[1].trim()
+            startMinute = parseClock(timeMatch.groupValues[1], timeMatch.groupValues[2], timeMatch.groupValues[3])
+        }
+        if (timeMatch != null && startMinute != null) {
+            val timeStr = formatClock(startMinute)
             if (dueDateLabel != null) {
                 dueDateLabel = "$dueDateLabel • $timeStr"
             } else {
@@ -279,8 +294,37 @@ object NaturalLanguageTaskParser {
             isFlagged = isFlagged,
             recurrenceRule = recurrenceRule,
             extractedSubtasks = extractedSubtasks,
-            detectedTokens = detectedTokens
+            detectedTokens = detectedTokens,
+            startMinute = startMinute,
+            durationMinutes = durationMinutes
         )
+    }
+
+    /** "3" "30" "pm" -> 930. Bare 1..7 is read as afternoon ("at 3" = 3 PM). Null when invalid. */
+    internal fun parseClock(hourRaw: String, minuteRaw: String, meridiemRaw: String): Int? {
+        var hour = hourRaw.toIntOrNull() ?: return null
+        val minute = minuteRaw.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+        if (minute !in 0..59) return null
+        when (meridiemRaw.lowercase(Locale.US)) {
+            "pm", "p" -> { if (hour !in 1..12) return null; if (hour != 12) hour += 12 }
+            "am", "a" -> { if (hour !in 1..12) return null; if (hour == 12) hour = 0 }
+            else -> { if (hour !in 0..23) return null; if (hour in 1..7) hour += 12 }
+        }
+        return hour * 60 + minute
+    }
+
+    fun formatClock(minuteOfDay: Int): String {
+        val h = (minuteOfDay / 60) % 24
+        val m = minuteOfDay % 60
+        val h12 = if (h % 12 == 0) 12 else h % 12
+        val suffix = if (h < 12) "AM" else "PM"
+        return if (m == 0) "$h12 $suffix" else String.format(Locale.US, "%d:%02d %s", h12, m, suffix)
+    }
+
+    fun formatDuration(minutes: Int): String = when {
+        minutes < 60 -> "${minutes}m"
+        minutes % 60 == 0 -> "${minutes / 60}h"
+        else -> "${minutes / 60}h ${minutes % 60}m"
     }
 
     /**
@@ -319,7 +363,9 @@ object NaturalLanguageTaskParser {
                 title = suggestion.cleanedTitle,
                 dueDateEpochDay = suggestion.dueDateEpochDay,
                 isFlagged = suggestion.isFlagged,
-                recurrenceRule = suggestion.recurrenceRule
+                recurrenceRule = suggestion.recurrenceRule,
+                startMinute = suggestion.startMinute,
+                durationMinutes = suggestion.durationMinutes
             )
         }
     }

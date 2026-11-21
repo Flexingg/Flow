@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -100,4 +101,10 @@ interface FlowDao {
 
     @Query("DELETE FROM calendar_events WHERE source = :source")
     suspend fun clearCalendarEventsBySource(source: String)
+
+    @Transaction
+    suspend fun replaceCalendarEventsForSource(source: String, events: List<CalendarEventEntity>) {
+        clearCalendarEventsBySource(source)
+        if (events.isNotEmpty()) upsertCalendarEvents(events)
+    }
 }
