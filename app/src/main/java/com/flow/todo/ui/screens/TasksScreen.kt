@@ -82,7 +82,7 @@ fun TasksScreen(
             onDeleteSubtask = { sub -> onDeleteSubtask(task.id, sub) },
             healthSnapshot = healthSnapshot,
             onEdit = { editing = task },
-            modifier = Modifier.padding(bottom = 6.dp)
+            modifier = Modifier.padding(bottom = 2.dp)
         )
     }
 

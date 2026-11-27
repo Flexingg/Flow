@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudSync
@@ -105,7 +106,9 @@ fun FluidSettingsSheet(
     onSignInWithEmail: (email: String, password: String, isSignUp: Boolean) -> Unit = { _, _, _ -> },
     onSignOutCloud: () -> Unit = {},
     onSyncCloudNow: () -> Unit = {},
-    onSaveFirebaseConfig: (FirebaseCloudConfig) -> Unit = {}
+    onSaveFirebaseConfig: (FirebaseCloudConfig) -> Unit = {},
+    /** Opens the AI coach settings; null hides the entry. */
+    onOpenCoachSettings: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isReducedMotion = FluidTheme.isReducedMotion
@@ -841,6 +844,52 @@ fun FluidSettingsSheet(
                 }
 
                 Spacer(modifier = Modifier.height(FluidSpacing.lg))
+
+                // AI Coach entry (the Tasks-screen card is hidden while the coach is off)
+                if (onOpenCoachSettings != null) {
+                    Text(
+                        text = "AI COACH",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        color = FluidTheme.colors.textTertiary,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.xs))
+
+                    FluidInsetCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onOpenCoachSettings),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                tint = FluidTheme.colors.accent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "AI coach",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = FluidTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = "Turn on, add an API key and pick a personality",
+                                    fontSize = 13.sp,
+                                    color = FluidTheme.colors.textSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(FluidSpacing.lg))
+                }
 
                 // Health Connect Integration Section
                 Text(

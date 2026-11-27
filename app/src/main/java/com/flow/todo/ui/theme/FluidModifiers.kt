@@ -219,9 +219,9 @@ fun Modifier.fluidInteractive(
             touchOffset = down.position
             dragDelta = Offset.Zero
             isPressed = true
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
 
             val pointerId = down.id
+            val touchSlop = viewConfiguration.touchSlop
             var insideBounds = true
 
             while (true) {
@@ -230,11 +230,18 @@ fun Modifier.fluidInteractive(
                 if (change == null || change.isConsumed) {
                     break
                 }
+                // Once the finger travels past touch slop this is a scroll/drag, not a tap:
+                // drop the press so lifting the finger never "clicks" the item that started the scroll.
+                if (!enableStretch && (change.position - down.position).getDistance() > touchSlop) {
+                    break
+                }
                 if (!change.pressed) {
                     insideBounds = change.position.x in 0f..size.width.toFloat() &&
                             change.position.y in 0f..size.height.toFloat()
-                    if (insideBounds) {
-                        onClick?.invoke()
+                    val movedFar = (change.position - down.position).getDistance() > touchSlop
+                    if (insideBounds && !movedFar && onClick != null) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onClick.invoke()
                     }
                     break
                 } else {
