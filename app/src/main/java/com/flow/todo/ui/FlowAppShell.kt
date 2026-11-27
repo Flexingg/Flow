@@ -107,6 +107,7 @@ fun FlowAppShell(
     val coach = remember { CoachController.get(context) }
     var isCoachSettingsOpen by rememberSaveable { mutableStateOf(false) }
     val coachSettingsRequested by coach.settingsRequested.collectAsStateWithLifecycle()
+    val coachSettings by coach.settings.collectAsStateWithLifecycle()
     LaunchedEffect(coachSettingsRequested) {
         if (coachSettingsRequested) {
             isCoachSettingsOpen = true
@@ -315,12 +316,16 @@ fun FlowAppShell(
                         onAddSubtask = viewModel::addSubtask,
                         onDeleteSubtask = viewModel::deleteSubtask,
                         onQuickAdd = { viewModel.setQuickCaptureOpen(true) },
-                        coachCard = {
-                            CoachCard(
-                                controller = coach,
-                                healthSnapshot = uiState.healthSnapshot,
-                                onOpenSettings = { isCoachSettingsOpen = true }
-                            )
+                        coachCard = if (coachSettings.enabled) {
+                            {
+                                CoachCard(
+                                    controller = coach,
+                                    healthSnapshot = uiState.healthSnapshot,
+                                    onOpenSettings = { isCoachSettingsOpen = true }
+                                )
+                            }
+                        } else {
+                            null
                         },
                         contentPadding = screenContentPadding,
                         listState = tasksListState
@@ -517,7 +522,11 @@ fun FlowAppShell(
                 onSyncSystemColorsNow = viewModel::syncSystemColorsNow,
                 onRestoreSystemPalette = viewModel::restoreOriginalSystemPalette,
                 onRequestHealthPermissions = onRequestHealthPermissions,
-                onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus
+                onRefreshHealthStats = viewModel::refreshHealthAndSystemStatus,
+                onOpenCoachSettings = {
+                    viewModel.setSettingsOpen(false)
+                    isCoachSettingsOpen = true
+                }
             )
         }
 
